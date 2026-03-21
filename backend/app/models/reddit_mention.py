@@ -17,5 +17,7 @@ class RedditMention(Base):
     sentiment_score = Column(Float, default=0.0)
     keywords_matched = Column(String)
     is_relevant = Column(Boolean, default=True)
+    agent_posted = Column(Boolean, default=False)
+    agent_posted_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     posted_at = Column(DateTime)

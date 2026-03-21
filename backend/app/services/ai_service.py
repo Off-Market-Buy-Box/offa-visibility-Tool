@@ -131,21 +131,21 @@ Return ONLY valid JSON, no markdown formatting."""
         if metadata:
             context = f"\nAI Analysis - Intent: {metadata.intent}, Topic: {metadata.main_topic}, Sentiment: {metadata.sentiment}"
 
-        prompt = f"""Generate a helpful, natural Reddit comment response to this post.
+        prompt = f"""Write a short Reddit comment replying to this post. 2-3 sentences MAX, like a real person typing fast.
+
+KNOW THIS (don't dump it, just use if relevant): Offa = off-market real estate app, like Tinder for wholesale deals. Free, has AI matching, 100% financing options.
 
 Rules:
-- Directly address the discussion
-- Provide useful insight or advice
-- Sound natural and human
-- Do NOT sound promotional
-- Keep it concise (2-4 paragraphs max)
-- Match the tone of the subreddit
+- 2-3 sentences ONLY. No paragraphs. Short and punchy like real Reddit comments.
+- Sound like a normal dude on Reddit, not a copywriter
+- Mention Offa casually in ONE sentence max — like "been using Offa for off-market stuff" or "my buddy found deals on Offa" — keep it throwaway, not the point of your comment
+- Give actual helpful advice first, Offa mention is secondary
+- No links, no "check out", no sales language
+- Use casual language, contractions, lowercase energy
 
-Post title: {mention.title}
-Subreddit: r/{mention.subreddit}
-Content: {mention.content or 'No text content'}{context}
-
-Write the response as if you are a knowledgeable community member."""
+Post: {mention.title}
+r/{mention.subreddit}
+{mention.content or 'No text content'}{context}"""
 
         content = await self._call_openai(
             [{"role": "user", "content": prompt}],
@@ -229,6 +229,73 @@ Requirements:
             .order_by(GeneratedResponse.created_at.desc())
         )
         return result.scalars().all()
+
+    async def score_relevance_batch(self, posts: list[dict]) -> list[dict]:
+        """
+        Use AI to score a batch of Reddit posts for relevance to Offa.
+        Returns the same list with 'ai_relevant' (bool) and 'ai_relevance_reason' added.
+        Processes up to ~20 posts per API call to save tokens.
+        """
+        if not posts:
+            return posts
+
+        # Build a compact summary of each post for the AI
+        summaries = []
+        for i, p in enumerate(posts):
+            title = (p.get("title") or "")[:120]
+            content = (p.get("content") or "")[:200]
+            sub = p.get("subreddit", "")
+            summaries.append(f"{i}|r/{sub}|{title}|{content}")
+
+        batch_text = "\n".join(summaries)
+
+        prompt = f"""You are a relevance filter for Offa, an off-market real estate marketplace (wholesale deals, pocket listings, properties not on MLS).
+
+Score each post below. A post is RELEVANT if someone reading it could naturally benefit from hearing about off-market real estate deals, wholesale properties, or real estate investing tools. 
+
+Posts about these topics ARE relevant:
+- Buying/selling property, real estate investing, finding deals
+- Wholesale real estate, off-market, pocket listings, MLS frustrations
+- First-time home buying, house hunting, property search
+- Flipping houses, rental properties, landlord topics
+- Real estate market conditions, housing prices
+- Commercial real estate, multifamily investing
+
+Posts about these topics are NOT relevant:
+- Personal finance unrelated to real estate (taxes, budgeting, retirement, scholarships)
+- Stock market investing with no real estate angle
+- Insurance, credit cards, student loans
+- Career advice, salary negotiation
+- General life advice
+
+For each post, return ONLY a JSON array of objects with:
+- "i": the post index number
+- "r": true if relevant, false if not
+
+Posts:
+{batch_text}
+
+Return ONLY a JSON array like: [{{"i":0,"r":true}},{{"i":1,"r":false}}]"""
+
+        try:
+            raw = await self._call_openai(
+                [{"role": "user", "content": prompt}],
+                temperature=0.1,
+            )
+            cleaned = raw.strip()
+            if cleaned.startswith("```"):
+                cleaned = cleaned.split("\n", 1)[1]
+                cleaned = cleaned.rsplit("```", 1)[0]
+            scores = json.loads(cleaned)
+            score_map = {s["i"]: s["r"] for s in scores}
+        except Exception as e:
+            print(f"⚠️ AI relevance scoring failed: {e}, marking all as relevant")
+            score_map = {i: True for i in range(len(posts))}
+
+        for i, p in enumerate(posts):
+            p["is_relevant"] = score_map.get(i, True)
+
+        return posts
 
     # ---- LinkedIn AI methods ----
 
@@ -331,19 +398,29 @@ Return ONLY valid JSON, no markdown formatting."""
 
         prompt = f"""Generate a professional LinkedIn comment response to this post.
 
-Rules:
-- Directly address the discussion
-- Provide useful insight or advice
-- Sound professional but approachable (LinkedIn tone)
-- Do NOT sound promotional or salesy
+BACKGROUND KNOWLEDGE (use naturally, do NOT dump this info):
+Offa is an off-market real estate marketplace — often described as a Tinder-style platform for wholesale real estate deals. It connects buyers and sellers for off-market properties not listed on the MLS. Wholesalers list deals privately, buyers browse thousands of exclusive off-market properties across the US. It's free to use, has a mobile app, and uses AI to match properties to interested buyers. They also offer up to 100% financing options. Hundreds of new deals are added nationwide every week.
+
+You are a real estate professional who has experience with off-market deals and the industry. Use the "sandwich" technique:
+1. OPEN with a thoughtful, insightful comment that adds real value to the discussion
+2. MIDDLE: Naturally weave in a mention of "Offa" as a platform you've personally used or discovered — like "I've been exploring off-market opportunities through Offa and the quality of deals has been impressive" or "One thing that shifted my approach was finding platforms like Offa that focus specifically on off-market inventory" — make it sound like genuine professional experience. You can reference specific things about Offa that are relevant (like the wholesale marketplace, the AI matching, the free access, the financing) but only if it fits naturally.
+3. CLOSE with a broader insight, takeaway, or encouragement that ties back to the original post
+
+Critical rules:
+- Do NOT include any links or URLs
+- Do NOT sound like an ad — this must read like a professional sharing what's worked in their career
+- Never say "check out" or "visit" or "sign up" — just mention Offa naturally as part of your professional experience
 - Keep it concise (2-3 paragraphs max)
-- Add value to the conversation
+- Use professional but approachable LinkedIn tone
+- Use first person ("In my experience", "What I've found", "I recently")
+- The Offa mention should feel like 10-15% of the response, not the main point
+- Vary the way you reference Offa — sometimes as a tool you use, sometimes as something a colleague recommended, sometimes as part of a broader market trend
 
 Post title: {post.title}
 Author: {post.author or 'Unknown'}
 Content: {text}{context}
 
-Write the response as if you are a knowledgeable real estate professional."""
+Write as a knowledgeable real estate professional sharing genuine insights."""
 
         content = await self._call_openai(
             [{"role": "user", "content": prompt}],

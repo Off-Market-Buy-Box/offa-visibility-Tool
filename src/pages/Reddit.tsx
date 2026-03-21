@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MessageSquare, TrendingUp, Eye, ArrowUpRight, Loader2, X, ChevronLeft, ChevronRight, Brain, Sparkles, FileText, Copy, Check } from "lucide-react";
+import { MessageSquare, TrendingUp, Eye, ArrowUpRight, Loader2, X, ChevronLeft, ChevronRight, Brain, Sparkles, FileText, Copy, Check, Send, Bot } from "lucide-react";
 import { useState, useEffect } from "react";
 import { redditService, type RedditMention, type RedditComment } from "@/services/redditService";
 import { aiService, type AIMetadata, type GeneratedResponse } from "@/services/aiService";
@@ -49,6 +49,20 @@ const Reddit = () => {
   const [generatedResponses, setGeneratedResponses] = useState<GeneratedResponse[]>([]);
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [responseText, setResponseText] = useState("");
+  const [postingToReddit, setPostingToReddit] = useState(false);
+
+  // Agent state
+  const [agentDialogOpen, setAgentDialogOpen] = useState(false);
+  const [agentRunning, setAgentRunning] = useState(false);
+  const [agentMaxPosts, setAgentMaxPosts] = useState(1);
+  const [agentDelay, setAgentDelay] = useState(10);
+  const [agentResults, setAgentResults] = useState<any>(null);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [agentLogs, setAgentLogs] = useState<Array<{ emoji: string; message: string; time: string }>>([]);
+  const [agentCleanup, setAgentCleanup] = useState<(() => void) | null>(null);
+  const [agentPosts, setAgentPosts] = useState<Array<any>>([]);
+  const [expandedPost, setExpandedPost] = useState<number | null>(null);
+  const [browserLoggingIn, setBrowserLoggingIn] = useState(false);
 
   // Filters
   const [filterSubreddit, setFilterSubreddit] = useState<string>("all");
@@ -182,6 +196,97 @@ const Reddit = () => {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const handlePostToReddit = async () => {
+    if (!selectedPost || !responseText.trim()) return;
+    setPostingToReddit(true);
+    try {
+      const result = await redditService.postComment(selectedPost.id, responseText, "browser");
+      toast({
+        title: "Posted to Reddit",
+        description: `Comment posted via ${result.method || "api"}`,
+      });
+    } catch (e: any) {
+      toast({
+        title: "Failed to Post",
+        description: e.message || "Check your Reddit credentials in .env",
+        variant: "destructive",
+      });
+    } finally {
+      setPostingToReddit(false);
+    }
+  };
+
+  const handleRunAgent = async () => {
+    setAgentRunning(true);
+    setAgentResults(null);
+    setAgentLogs([]);
+    setAgentPosts([]);
+    setExpandedPost(null);
+
+    const now = () => new Date().toLocaleTimeString();
+
+    const cleanup = redditService.runAgentStream(
+      agentMaxPosts,
+      agentDelay,
+      false,
+      "browser",
+      (event: any) => {
+        if (event.type === "log" && event.emoji && event.message) {
+          setAgentLogs((prev) => [...prev, { emoji: event.emoji, message: event.message, time: now() }]);
+        } else if (event.type === "post_start") {
+          // A new post is being processed — add it to the list
+          setAgentPosts((prev) => [...prev, { ...event.post, step: "generating", response_content: null }]);
+        } else if (event.type === "post_response") {
+          // Response was generated — update the post with full content
+          setAgentPosts((prev) =>
+            prev.map((p) =>
+              p.id === event.post_id
+                ? { ...p, response_content: event.response_content, char_count: event.char_count, step: "posting" }
+                : p
+            )
+          );
+        } else if (event.type === "post_result") {
+          // Final result for this post
+          setAgentPosts((prev) =>
+            prev.map((p) =>
+              p.id === event.post?.id
+                ? { ...p, ...event.post, step: "done" }
+                : p
+            )
+          );
+        } else if (event.type === "result") {
+          setAgentResults(event.stats);
+          toast({
+            title: "Agent Run Complete",
+            description: `${event.stats?.threads_found || 0} threads, ${event.stats?.comments_posted || 0} posted`,
+          });
+          fetchMentions();
+        } else if (event.type === "error") {
+          setAgentLogs((prev) => [...prev, { emoji: "❌", message: event.message || "Unknown error", time: now() }]);
+          toast({ title: "Agent Error", description: event.message, variant: "destructive" });
+        }
+      },
+      () => {
+        setAgentRunning(false);
+        setAgentCleanup(null);
+      },
+      (err) => {
+        toast({ title: "Agent Failed", description: err, variant: "destructive" });
+      },
+    );
+
+    setAgentCleanup(() => cleanup);
+  };
+
+  const fetchPendingCount = async () => {
+    try {
+      const data = await redditService.getPendingCount();
+      setPendingCount(data.pending_count);
+    } catch { /* ignore */ }
+  };
+
+  useEffect(() => { fetchPendingCount(); }, [mentions]);
+
   const timeAgo = (dateStr: string | null) => {
     if (!dateStr) return "";
     const diff = Date.now() - new Date(dateStr).getTime();
@@ -242,6 +347,191 @@ const Reddit = () => {
                   <Input value={monitorData.keywords} onChange={(e) => setMonitorData({ ...monitorData, keywords: e.target.value })} placeholder="e.g., off market, wholesale, offa.com" />
                 </div>
                 <Button onClick={handleMonitor} className="w-full">Start Monitoring</Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+          <Dialog open={agentDialogOpen} onOpenChange={(open) => {
+            setAgentDialogOpen(open);
+            if (!open && agentCleanup) { agentCleanup(); setAgentCleanup(null); setAgentRunning(false); }
+          }}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <Bot className="h-4 w-4" />Agent
+                {pendingCount > 0 && <span className="bg-primary text-primary-foreground text-[10px] px-1.5 py-0.5 rounded-full">{pendingCount}</span>}
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+              <DialogHeader><DialogTitle className="flex items-center gap-2"><Bot className="h-5 w-5" />Reddit Posting Agent</DialogTitle></DialogHeader>
+              <div className="space-y-4 overflow-y-auto flex-1 pr-1">
+                <p className="text-sm text-muted-foreground">The agent will automatically generate AI responses and post them to Reddit threads that haven't been processed yet.</p>
+                
+                {/* Controls */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Max Posts</Label>
+                    <Input type="number" min={1} max={20} value={agentMaxPosts} onChange={(e) => setAgentMaxPosts(Number(e.target.value))} />
+                  </div>
+                  <div>
+                    <Label>Delay (seconds)</Label>
+                    <Input type="number" min={5} max={600} value={agentDelay} onChange={(e) => setAgentDelay(Number(e.target.value))} placeholder="10" />
+                  </div>
+                </div>
+                <Button onClick={handleRunAgent} disabled={agentRunning} className="w-full">
+                  {agentRunning ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" />Agent Running...</>) : (<><Bot className="h-4 w-4 mr-2" />Run Agent</>)}
+                </Button>
+                
+                  <Button
+                    variant="outline"
+                    className="w-full text-xs"
+                    disabled={browserLoggingIn}
+                    onClick={async () => {
+                      setBrowserLoggingIn(true);
+                      try {
+                        await redditService.browserLogin();
+                        toast({ title: "Logged in!", description: "Reddit session saved. You can now post." });
+                      } catch (e: any) {
+                        toast({ title: "Login Issue", description: e.message || "Solve CAPTCHA in the browser window", variant: "destructive" });
+                      } finally {
+                        setBrowserLoggingIn(false);
+                      }
+                    }}
+                  >
+                    {browserLoggingIn ? (<><Loader2 className="h-3 w-3 mr-1 animate-spin" />Browser opening — solve CAPTCHA...</>) : "🔐 Login to Reddit (first time setup)"}
+                  </Button>
+
+                {/* Live Activity Log */}
+                {agentLogs.length > 0 && (
+                  <div className="bg-black/40 rounded-lg p-3 space-y-0.5 text-[11px] max-h-[160px] overflow-y-auto font-mono border border-border" ref={(el) => { if (el) el.scrollTop = el.scrollHeight; }}>
+                    <div className="text-muted-foreground mb-1.5 text-[10px] uppercase tracking-wider flex items-center gap-2">
+                      Activity Log
+                      {agentRunning && <Loader2 className="h-2.5 w-2.5 animate-spin" />}
+                    </div>
+                    {agentLogs.map((log, i) => (
+                      <div key={i} className="flex items-start gap-1.5 leading-tight">
+                        <span className="text-muted-foreground/60 shrink-0">{log.time}</span>
+                        <span className="shrink-0">{log.emoji}</span>
+                        <span className="text-foreground/80">{log.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Posts Detail Cards */}
+                {agentPosts.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="text-xs text-muted-foreground uppercase tracking-wider flex items-center justify-between">
+                      <span>Processed Threads ({agentPosts.length})</span>
+                      {agentResults && (
+                        <span className="normal-case tracking-normal">
+                          {agentResults.responses_generated} generated · {agentResults.comments_posted} posted · {agentResults.errors?.length || 0} errors
+                        </span>
+                      )}
+                    </div>
+                    {agentPosts.map((post, i) => {
+                      const isExpanded = expandedPost === i;
+                      const statusColor = post.status === "posted"
+                        ? "border-green-500/40 bg-green-500/5"
+                        : post.status === "error"
+                        ? "border-red-500/40 bg-red-500/5"
+                        : "border-yellow-500/40 bg-yellow-500/5";
+                      const statusBadge = post.status === "posted"
+                        ? "bg-green-500/20 text-green-400"
+                        : post.status === "error"
+                        ? "bg-red-500/20 text-red-400"
+                        : "bg-yellow-500/20 text-yellow-400";
+                      const stepLabel = post.step === "generating"
+                        ? "Generating..."
+                        : post.step === "posting"
+                        ? "Posting..."
+                        : post.status;
+
+                      return (
+                        <div key={i} className={`rounded-lg border p-3 ${statusColor} transition-all`}>
+                          {/* Post Header */}
+                          <div className="flex items-start justify-between gap-2 cursor-pointer" onClick={() => setExpandedPost(isExpanded ? null : i)}>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-[10px] text-muted-foreground">r/{post.subreddit}</span>
+                                <span className="text-[10px] text-muted-foreground">·</span>
+                                <span className="text-[10px] text-muted-foreground">u/{post.author}</span>
+                                <span className="text-[10px] text-muted-foreground">·</span>
+                                <span className="text-[10px] text-muted-foreground">↑{post.score} 💬{post.num_comments}</span>
+                              </div>
+                              <p className="text-sm font-medium text-foreground leading-tight">{post.title}</p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {post.step !== "done" && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${statusBadge}`}>{stepLabel}</span>
+                              <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                            </div>
+                          </div>
+
+                          {/* Expanded Detail */}
+                          {isExpanded && (
+                            <div className="mt-3 space-y-3 border-t border-border/50 pt-3">
+                              {/* Original Post Preview */}
+                              {post.content_preview && (
+                                <div>
+                                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Original Post</div>
+                                  <p className="text-xs text-foreground/70 leading-relaxed bg-background/50 rounded p-2">{post.content_preview}...</p>
+                                </div>
+                              )}
+
+                              {/* Generated Response */}
+                              {post.response_content && (
+                                <div>
+                                  <div className="flex items-center justify-between mb-1">
+                                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Generated Response ({post.response_content.length} chars)</span>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-5 px-1.5 text-[10px]"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigator.clipboard.writeText(post.response_content);
+                                        toast({ title: "Copied!" });
+                                      }}
+                                    >
+                                      <Copy className="h-2.5 w-2.5 mr-1" />Copy
+                                    </Button>
+                                  </div>
+                                  <div className="text-xs text-foreground leading-relaxed bg-background/50 rounded p-2 max-h-[200px] overflow-y-auto whitespace-pre-wrap">
+                                    {post.response_content}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Comment URL */}
+                              {post.comment_url && (
+                                <div className="flex items-center gap-2">
+                                  <Check className="h-3 w-3 text-green-400" />
+                                  <a href={post.comment_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline truncate">
+                                    {post.comment_url}
+                                  </a>
+                                </div>
+                              )}
+
+                              {/* Error */}
+                              {post.error && (
+                                <div className="flex items-start gap-2 bg-red-500/10 rounded p-2">
+                                  <X className="h-3 w-3 text-red-400 shrink-0 mt-0.5" />
+                                  <p className="text-xs text-red-400">{post.error}</p>
+                                </div>
+                              )}
+
+                              {/* Open on Reddit */}
+                              {post.url && (
+                                <a href={post.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                                  <ArrowUpRight className="h-3 w-3" />View thread on Reddit
+                                </a>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </DialogContent>
           </Dialog>
@@ -499,9 +789,21 @@ const Reddit = () => {
                     <Sparkles className="h-3 w-3 text-primary" />
                     Response
                   </h3>
-                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => { navigator.clipboard.writeText(responseText); setCopiedId(-1); setTimeout(() => setCopiedId(null), 2000); }}>
-                    {copiedId === -1 ? <Check className="h-3 w-3 text-green-400" /> : <Copy className="h-3 w-3" />}
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => { navigator.clipboard.writeText(responseText); setCopiedId(-1); setTimeout(() => setCopiedId(null), 2000); }}>
+                      {copiedId === -1 ? <Check className="h-3 w-3 text-green-400" /> : <Copy className="h-3 w-3" />}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="default"
+                      className="h-7 text-xs gap-1"
+                      disabled={postingToReddit || !responseText.trim()}
+                      onClick={handlePostToReddit}
+                    >
+                      {postingToReddit ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                      Post to Reddit
+                    </Button>
+                  </div>
                 </div>
                 <textarea
                   className="w-full min-h-[200px] max-h-[40vh] bg-background border border-border rounded-lg p-3 text-sm text-foreground leading-relaxed resize-y focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground"

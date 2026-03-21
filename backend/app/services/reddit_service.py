@@ -19,10 +19,10 @@ class RedditService:
             "RealEstate",
             "FirstTimeHomeBuyer",
             "CommercialRealEstate",
+            "WholesaleRealestate",
+            "Flipping",
             "realestate",
-            "investing",
-            "personalfinance",
-            "Flipping"
+            "HousingMarket",
         ]
     
     async def search_reddit(
@@ -51,18 +51,25 @@ class RedditService:
 
                 for post in posts:
                     pd = post.get("data", {})
+                    title = pd.get("title", "")
+                    content = pd.get("selftext", "")[:2000]
+                    combined = (title + " " + content).lower()
+
+                    # Filter: must be about real estate / property / investing
+                    is_relevant = self._check_relevance(combined)
+
                     results.append({
                         "post_id": pd.get("id"),
                         "subreddit": pd.get("subreddit", ""),
-                        "title": pd.get("title", ""),
+                        "title": title,
                         "author": pd.get("author", "[deleted]"),
-                        "content": pd.get("selftext", "")[:2000],
+                        "content": content,
                         "url": f"{self.base_url}{pd.get('permalink', '')}",
                         "score": pd.get("score", 0),
                         "num_comments": pd.get("num_comments", 0),
                         "keywords_matched": query,
                         "posted_at": datetime.fromtimestamp(pd.get("created_utc", 0)),
-                        "is_relevant": True
+                        "is_relevant": is_relevant,
                     })
                     
             except Exception as e:
@@ -120,6 +127,24 @@ class RedditService:
         
         return comments
 
+    def _check_relevance(self, text: str) -> bool:
+        """Check if a post is actually about real estate / property investing."""
+        # Must contain at least one real-estate-related keyword
+        relevant_terms = [
+            "real estate", "property", "properties", "house", "home",
+            "rental", "landlord", "tenant", "mortgage", "wholesale",
+            "off market", "off-market", "pocket listing", "mls",
+            "flip", "flipping", "rehab", "investment property",
+            "buy and hold", "cash flow", "cap rate", "roi",
+            "deal", "closing", "under contract", "seller",
+            "buyer", "listing", "appraisal", "inspection",
+            "foreclosure", "distressed", "motivated seller",
+            "duplex", "triplex", "multifamily", "single family",
+            "condo", "apartment", "commercial", "residential",
+            "offa", "zillow", "redfin", "realtor",
+        ]
+        return any(term in text for term in relevant_terms)
+
     async def search_subreddit(
         self, 
         subreddit: str, 
@@ -150,16 +175,20 @@ class RedditService:
         keywords: List[str] = None,
         limit_per_subreddit: int = 25
     ) -> Dict:
-        """Monitor real estate subreddits using Reddit search API"""
+        """Monitor real estate subreddits using Reddit search API + AI relevance filtering"""
         
-        # Search queries that will find relevant posts
+        # Search queries focused on off-market / wholesale / property deals
         search_queries = [
-            "off market real estate",
             "off market deals",
-            "wholesale real estate",
+            "off market properties",
+            "wholesale real estate deals",
             "pocket listing",
-            "real estate investing deals",
-            "off market properties"
+            "finding off market",
+            "wholesale deals",
+            "how to find deals",
+            "MLS alternatives",
+            "off market house",
+            "investment property deals",
         ]
         
         if keywords:
@@ -170,7 +199,8 @@ class RedditService:
             "subreddits_checked": 0,
             "total_mentions_found": 0,
             "new_mentions_saved": 0,
-            "offa_mentions": 0
+            "offa_mentions": 0,
+            "ai_filtered_out": 0,
         }
         
         # Search across real estate subreddits
@@ -182,7 +212,6 @@ class RedditService:
                 
                 if results:
                     all_mentions.extend(results)
-                    stats["total_mentions_found"] += len(results)
                     
                     offa_count = sum(1 for m in results if "offa" in (m.get("content", "") + m.get("title", "")).lower())
                     stats["offa_mentions"] += offa_count
@@ -191,16 +220,34 @@ class RedditService:
             
             stats["subreddits_checked"] += 1
         
-        # Deduplicate
+        # Deduplicate by post_id
         seen = set()
         unique_mentions = []
         for m in all_mentions:
             if m["post_id"] not in seen:
                 seen.add(m["post_id"])
                 unique_mentions.append(m)
-        
-        stats["total_mentions_found"] = len(unique_mentions)
-        stats["new_mentions_saved"] = await self.save_mentions(db, unique_mentions)
+
+        # Step 1: Quick keyword filter (remove obviously irrelevant)
+        keyword_filtered = [m for m in unique_mentions if m.get("is_relevant", True)]
+        print(f"📋 After keyword filter: {len(keyword_filtered)}/{len(unique_mentions)} posts")
+
+        # Step 2: AI relevance scoring on the remaining posts (batches of 20)
+        from app.services.ai_service import AIService
+        ai = AIService()
+        ai_scored = []
+        for i in range(0, len(keyword_filtered), 20):
+            batch = keyword_filtered[i:i+20]
+            scored = await ai.score_relevance_batch(batch)
+            ai_scored.extend(scored)
+
+        relevant = [m for m in ai_scored if m.get("is_relevant", False)]
+        stats["ai_filtered_out"] = len(ai_scored) - len(relevant)
+        stats["total_mentions_found"] = len(relevant)
+        print(f"🤖 After AI filter: {len(relevant)}/{len(ai_scored)} posts relevant")
+
+        # Save only relevant posts
+        stats["new_mentions_saved"] = await self.save_mentions(db, relevant)
         
         return stats
     

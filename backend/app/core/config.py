@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     GOOGLE_API_KEY: str = ""
     GOOGLE_CSE_ID: str = ""
     OPENAI_API_KEY: str = ""
+    REDDIT_CLIENT_ID: str = ""
+    REDDIT_CLIENT_SECRET: str = ""
+    REDDIT_USERNAME: str = ""
+    REDDIT_PASSWORD: str = ""
     
     class Config:
         env_file = ".env"
