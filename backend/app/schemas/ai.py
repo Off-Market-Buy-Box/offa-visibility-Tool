@@ -7,6 +7,7 @@ class AIMetadataResponse(BaseModel):
     id: int
     reddit_mention_id: Optional[int] = None
     linkedin_post_id: Optional[int] = None
+    twitter_post_id: Optional[int] = None
     intent: Optional[str] = None
     main_topic: Optional[str] = None
     summary: Optional[str] = None
@@ -24,6 +25,7 @@ class GeneratedResponseOut(BaseModel):
     id: int
     reddit_mention_id: Optional[int] = None
     linkedin_post_id: Optional[int] = None
+    twitter_post_id: Optional[int] = None
     response_type: str
     content: str
     created_at: datetime
@@ -51,3 +53,11 @@ class GenerateLinkedInResponseRequest(BaseModel):
 class GenerateBlogRequest(BaseModel):
     mention_ids: List[int]
     topic: Optional[str] = None
+
+
+class AnalyzeTwitterRequest(BaseModel):
+    post_id: int
+
+
+class GenerateTwitterResponseRequest(BaseModel):
+    post_id: int

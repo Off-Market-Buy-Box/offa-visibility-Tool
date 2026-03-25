@@ -3,17 +3,17 @@ from datetime import datetime
 from app.core.database import Base
 
 
-class LinkedInPost(Base):
-    __tablename__ = "linkedin_posts"
+class TwitterPost(Base):
+    __tablename__ = "twitter_posts"
 
     id = Column(Integer, primary_key=True, index=True)
-    result_id = Column(String, unique=True, index=True, nullable=False)  # unique hash of url
+    tweet_id = Column(String, unique=True, index=True, nullable=False)
     title = Column(String, nullable=False)
     snippet = Column(Text, nullable=True)
-    content = Column(Text, nullable=True)  # Full text fetched from the page
+    content = Column(Text, nullable=True)
     url = Column(String, nullable=False)
     author = Column(String, nullable=True)
-    source = Column(String, default="linkedin.com")
+    source = Column(String, default="twitter.com")
     keywords_matched = Column(String, nullable=True)
     is_relevant = Column(Boolean, default=True)
     agent_posted = Column(Boolean, default=False)

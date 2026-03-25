@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     REDDIT_USERNAME: str = ""
     REDDIT_PASSWORD: str = ""
     
+    LINKEDIN_EMAIL: str = ""
+    LINKEDIN_PASSWORD: str = ""
+    
+    TWITTER_EMAIL: str = ""
+    TWITTER_PASSWORD: str = ""
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

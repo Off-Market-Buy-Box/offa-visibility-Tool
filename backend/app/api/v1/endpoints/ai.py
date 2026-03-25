@@ -7,8 +7,10 @@ from app.schemas.ai import (
     GeneratedResponseOut,
     AnalyzeRequest,
     AnalyzeLinkedInRequest,
+    AnalyzeTwitterRequest,
     GenerateResponseRequest,
     GenerateLinkedInResponseRequest,
+    GenerateTwitterResponseRequest,
     GenerateBlogRequest,
 )
 from app.services.ai_service import AIService
@@ -115,3 +117,44 @@ async def get_linkedin_responses(post_id: int, db: AsyncSession = Depends(get_db
     """Get all generated responses for a LinkedIn post"""
     service = AIService()
     return await service.get_linkedin_responses(db, post_id)
+
+
+# ---- Twitter/X AI endpoints ----
+
+@router.post("/twitter/analyze", response_model=AIMetadataResponse)
+async def analyze_twitter_post(req: AnalyzeTwitterRequest, db: AsyncSession = Depends(get_db)):
+    try:
+        service = AIService()
+        metadata = await service.analyze_twitter_post(db, req.post_id)
+        return metadata
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI analysis failed: {str(e)}")
+
+
+@router.get("/twitter/metadata/{post_id}", response_model=AIMetadataResponse)
+async def get_twitter_metadata(post_id: int, db: AsyncSession = Depends(get_db)):
+    service = AIService()
+    metadata = await service.get_twitter_metadata(db, post_id)
+    if not metadata:
+        raise HTTPException(status_code=404, detail="No AI analysis found")
+    return metadata
+
+
+@router.post("/twitter/generate-response", response_model=GeneratedResponseOut)
+async def generate_twitter_response(req: GenerateTwitterResponseRequest, db: AsyncSession = Depends(get_db)):
+    try:
+        service = AIService()
+        response = await service.generate_twitter_response(db, req.post_id)
+        return response
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Response generation failed: {str(e)}")
+
+
+@router.get("/twitter/responses/{post_id}", response_model=List[GeneratedResponseOut])
+async def get_twitter_responses(post_id: int, db: AsyncSession = Depends(get_db)):
+    service = AIService()
+    return await service.get_twitter_responses(db, post_id)

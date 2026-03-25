@@ -28,3 +28,9 @@ build/
 # Database
 *.db
 *.sqlite
+
+# Playwright browser profiles (cache, cookies, etc.)
+**/.reddit_browser_profile/
+**/.linkedin_browser_profile/
+**/.twitter_browser_profile/
+**/.*_browser_profile/

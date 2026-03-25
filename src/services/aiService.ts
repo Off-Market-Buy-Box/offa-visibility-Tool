@@ -4,6 +4,7 @@ export interface AIMetadata {
   id: number;
   reddit_mention_id: number | null;
   linkedin_post_id: number | null;
+  twitter_post_id: number | null;
   intent: string | null;
   main_topic: string | null;
   summary: string | null;
@@ -18,6 +19,7 @@ export interface GeneratedResponse {
   id: number;
   reddit_mention_id: number | null;
   linkedin_post_id: number | null;
+  twitter_post_id: number | null;
   response_type: string;
   content: string;
   created_at: string;
@@ -72,5 +74,28 @@ export const aiService = {
 
   getLinkedInResponses: async (postId: number): Promise<GeneratedResponse[]> => {
     return api.get<GeneratedResponse[]>(`/ai/linkedin/responses/${postId}`);
+  },
+
+  // Twitter AI
+  analyzeTwitter: async (postId: number): Promise<AIMetadata> => {
+    return api.post<AIMetadata>('/ai/twitter/analyze', { post_id: postId });
+  },
+
+  getTwitterMetadata: async (postId: number): Promise<AIMetadata | null> => {
+    try {
+      const result = await api.get<AIMetadata>(`/ai/twitter/metadata/${postId}`);
+      if (!result || Array.isArray(result) || !result.id) return null;
+      return result;
+    } catch {
+      return null;
+    }
+  },
+
+  generateTwitterResponse: async (postId: number): Promise<GeneratedResponse> => {
+    return api.post<GeneratedResponse>('/ai/twitter/generate-response', { post_id: postId });
+  },
+
+  getTwitterResponses: async (postId: number): Promise<GeneratedResponse[]> => {
+    return api.get<GeneratedResponse[]>(`/ai/twitter/responses/${postId}`);
   },
 };

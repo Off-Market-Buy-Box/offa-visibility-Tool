@@ -1,8 +1,0 @@
-2026/03/21-15:57:40.941 3348 Reusing MANIFEST C:\Users\Mega-PC\Downloads\chat-compass-shine-main\chat-compass-shine-main\backend\app\services\.reddit_browser_profile\Default\Session Storage/MANIFEST-000001
-2026/03/21-15:57:40.942 3348 Recovering log #3
-2026/03/21-15:57:40.942 3348 Level-0 table #3: started
-2026/03/21-15:57:40.948 3348 Level-0 table #3: 43219 bytes OK
-2026/03/21-15:57:40.949 3348 Recovering log #4
-2026/03/21-15:57:40.951 3348 Reusing old log C:\Users\Mega-PC\Downloads\chat-compass-shine-main\chat-compass-shine-main\backend\app\services\.reddit_browser_profile\Default\Session Storage/000004.log 
-2026/03/21-15:57:40.952 3348 Delete type=0 #3
-2026/03/21-15:57:40.953 3348 Delete type=2 #5

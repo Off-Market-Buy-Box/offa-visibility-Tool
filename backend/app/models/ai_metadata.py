@@ -9,6 +9,7 @@ class AIMetadata(Base):
     id = Column(Integer, primary_key=True, index=True)
     reddit_mention_id = Column(Integer, ForeignKey("reddit_mentions.id", ondelete="CASCADE"), unique=True, index=True, nullable=True)
     linkedin_post_id = Column(Integer, ForeignKey("linkedin_posts.id", ondelete="CASCADE"), unique=True, index=True, nullable=True)
+    twitter_post_id = Column(Integer, ForeignKey("twitter_posts.id", ondelete="CASCADE"), unique=True, index=True, nullable=True)
     intent = Column(String, nullable=True)  # question, discussion, insight, problem, opportunity
     main_topic = Column(String, nullable=True)
     summary = Column(Text, nullable=True)

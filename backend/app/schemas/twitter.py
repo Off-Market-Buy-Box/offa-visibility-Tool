@@ -3,9 +3,9 @@ from datetime import datetime
 from typing import Optional
 
 
-class LinkedInPostResponse(BaseModel):
+class TwitterPostResponse(BaseModel):
     id: int
-    result_id: str
+    tweet_id: str
     title: str
     snippet: Optional[str] = None
     content: Optional[str] = None

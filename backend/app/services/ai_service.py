@@ -6,6 +6,7 @@ from sqlalchemy import select
 from app.core.config import settings
 from app.models.reddit_mention import RedditMention
 from app.models.linkedin_post import LinkedInPost
+from app.models.twitter_post import TwitterPost
 from app.models.ai_metadata import AIMetadata
 from app.models.generated_response import GeneratedResponse
 
@@ -16,7 +17,7 @@ class AIService:
     def __init__(self):
         self.api_key = settings.OPENAI_API_KEY
         self.api_url = "https://api.openai.com/v1/chat/completions"
-        self.model = "gpt-4o-mini"
+        self.model = "gpt-5.4-mini"
 
     async def _call_openai(self, messages: List[Dict], temperature: float = 0.7) -> str:
         """Make a request to OpenAI API"""
@@ -396,31 +397,22 @@ Return ONLY valid JSON, no markdown formatting."""
         if len(text) > 6000:
             text = text[:6000] + "..."
 
-        prompt = f"""Generate a professional LinkedIn comment response to this post.
+        prompt = f"""Write a short LinkedIn comment replying to this post. 2-4 sentences MAX.
 
-BACKGROUND KNOWLEDGE (use naturally, do NOT dump this info):
-Offa is an off-market real estate marketplace — often described as a Tinder-style platform for wholesale real estate deals. It connects buyers and sellers for off-market properties not listed on the MLS. Wholesalers list deals privately, buyers browse thousands of exclusive off-market properties across the US. It's free to use, has a mobile app, and uses AI to match properties to interested buyers. They also offer up to 100% financing options. Hundreds of new deals are added nationwide every week.
+KNOW THIS (use only if relevant, don't force it): Offa = off-market real estate marketplace, like Tinder for wholesale deals. Free app, AI matching, 100% financing options.
 
-You are a real estate professional who has experience with off-market deals and the industry. Use the "sandwich" technique:
-1. OPEN with a thoughtful, insightful comment that adds real value to the discussion
-2. MIDDLE: Naturally weave in a mention of "Offa" as a platform you've personally used or discovered — like "I've been exploring off-market opportunities through Offa and the quality of deals has been impressive" or "One thing that shifted my approach was finding platforms like Offa that focus specifically on off-market inventory" — make it sound like genuine professional experience. You can reference specific things about Offa that are relevant (like the wholesale marketplace, the AI matching, the free access, the financing) but only if it fits naturally.
-3. CLOSE with a broader insight, takeaway, or encouragement that ties back to the original post
+Rules:
+- 2-4 sentences ONLY. Short, punchy, professional.
+- Sound like a real estate pro commenting naturally, not a copywriter
+- Mention Offa casually in ONE sentence max — like "been using Offa for off-market sourcing" or "platforms like Offa have made this easier" — keep it throwaway
+- Give actual value first, Offa mention is secondary
+- No links, no "check out", no sales language
+- Professional but conversational LinkedIn tone
+- First person ("In my experience", "What I've found")
 
-Critical rules:
-- Do NOT include any links or URLs
-- Do NOT sound like an ad — this must read like a professional sharing what's worked in their career
-- Never say "check out" or "visit" or "sign up" — just mention Offa naturally as part of your professional experience
-- Keep it concise (2-3 paragraphs max)
-- Use professional but approachable LinkedIn tone
-- Use first person ("In my experience", "What I've found", "I recently")
-- The Offa mention should feel like 10-15% of the response, not the main point
-- Vary the way you reference Offa — sometimes as a tool you use, sometimes as something a colleague recommended, sometimes as part of a broader market trend
-
-Post title: {post.title}
+Post: {post.title}
 Author: {post.author or 'Unknown'}
-Content: {text}{context}
-
-Write as a knowledgeable real estate professional sharing genuine insights."""
+Content: {text}{context}"""
 
         content = await self._call_openai(
             [{"role": "user", "content": prompt}],
@@ -449,6 +441,139 @@ Write as a knowledgeable real estate professional sharing genuine insights."""
         result = await db.execute(
             select(GeneratedResponse)
             .where(GeneratedResponse.linkedin_post_id == post_id)
+            .order_by(GeneratedResponse.created_at.desc())
+        )
+        return result.scalars().all()
+
+    # ---- Twitter/X AI methods ----
+
+    async def analyze_twitter_post(self, db: AsyncSession, post_id: int) -> AIMetadata:
+        """Analyze a Twitter post and extract structured metadata"""
+        result = await db.execute(
+            select(TwitterPost).where(TwitterPost.id == post_id)
+        )
+        post = result.scalar_one_or_none()
+        if not post:
+            raise ValueError(f"Twitter post {post_id} not found")
+
+        existing = await db.execute(
+            select(AIMetadata).where(AIMetadata.twitter_post_id == post_id)
+        )
+        existing_meta = existing.scalar_one_or_none()
+        if existing_meta:
+            return existing_meta
+
+        text = post.content or post.snippet or ""
+        if len(text) > 4000:
+            text = text[:4000] + "..."
+
+        prompt = f"""Analyze this tweet and return a JSON object with the following fields:
+- intent: one of "question", "discussion", "insight", "problem", "opportunity"
+- main_topic: a short phrase describing the main topic
+- summary: 1-2 sentence summary
+- pain_points: array of pain points mentioned (max 5)
+- opportunities: array of business/engagement opportunities (max 5)
+- keywords: array of relevant keywords (max 8)
+- sentiment: one of "positive", "negative", "neutral", "mixed"
+
+Tweet by: {post.author or 'Unknown'}
+Content: {text}
+
+Return ONLY valid JSON, no markdown formatting."""
+
+        raw = await self._call_openai(
+            [{"role": "user", "content": prompt}],
+            temperature=0.3,
+        )
+
+        try:
+            cleaned = raw.strip()
+            if cleaned.startswith("```"):
+                cleaned = cleaned.split("\n", 1)[1]
+                cleaned = cleaned.rsplit("```", 1)[0]
+            parsed = json.loads(cleaned)
+        except json.JSONDecodeError:
+            parsed = {
+                "intent": "discussion", "main_topic": "unknown",
+                "summary": raw[:200], "pain_points": [],
+                "opportunities": [], "keywords": [], "sentiment": "neutral",
+            }
+
+        metadata = AIMetadata(
+            twitter_post_id=post_id,
+            intent=parsed.get("intent", "discussion"),
+            main_topic=parsed.get("main_topic", ""),
+            summary=parsed.get("summary", ""),
+            pain_points=parsed.get("pain_points", []),
+            opportunities=parsed.get("opportunities", []),
+            keywords=parsed.get("keywords", []),
+            sentiment=parsed.get("sentiment", "neutral"),
+        )
+        db.add(metadata)
+        await db.commit()
+        await db.refresh(metadata)
+        return metadata
+
+    async def generate_twitter_response(self, db: AsyncSession, post_id: int) -> GeneratedResponse:
+        """Generate a short reply for a tweet"""
+        result = await db.execute(
+            select(TwitterPost).where(TwitterPost.id == post_id)
+        )
+        post = result.scalar_one_or_none()
+        if not post:
+            raise ValueError(f"Twitter post {post_id} not found")
+
+        meta_result = await db.execute(
+            select(AIMetadata).where(AIMetadata.twitter_post_id == post_id)
+        )
+        metadata = meta_result.scalar_one_or_none()
+
+        context = ""
+        if metadata:
+            context = f"\nAI Analysis - Intent: {metadata.intent}, Topic: {metadata.main_topic}, Sentiment: {metadata.sentiment}"
+
+        text = post.content or post.snippet or ""
+
+        prompt = f"""Write a short Twitter reply to this tweet. 1-2 sentences MAX, under 280 characters.
+
+KNOW THIS (use only if relevant): Offa = off-market real estate app, like Tinder for wholesale deals. Free, AI matching, 100% financing.
+
+Rules:
+- 1-2 sentences ONLY. Must fit in a tweet (under 280 chars).
+- Sound like a real person on Twitter, casual and quick
+- Mention Offa in ONE sentence max — like "been using Offa for this" — keep it throwaway
+- Give actual value first, Offa mention is secondary
+- No links, no hashtags, no "check out", no sales language
+- Casual Twitter energy, contractions, lowercase vibes
+
+Tweet by {post.author or 'someone'}:
+{text}{context}"""
+
+        content = await self._call_openai(
+            [{"role": "user", "content": prompt}],
+            temperature=0.7,
+        )
+
+        gen_response = GeneratedResponse(
+            twitter_post_id=post_id,
+            response_type="comment",
+            content=content.strip(),
+        )
+        db.add(gen_response)
+        await db.commit()
+        await db.refresh(gen_response)
+        return gen_response
+
+    async def get_twitter_metadata(self, db: AsyncSession, post_id: int) -> Optional[AIMetadata]:
+        result = await db.execute(
+            select(AIMetadata).where(AIMetadata.twitter_post_id == post_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_twitter_responses(self, db: AsyncSession, post_id: int) -> List[GeneratedResponse]:
+        result = await db.execute(
+            select(GeneratedResponse)
+            .where(GeneratedResponse.twitter_post_id == post_id)
             .order_by(GeneratedResponse.created_at.desc())
         )
         return result.scalars().all()

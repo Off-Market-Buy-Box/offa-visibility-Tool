@@ -2,6 +2,7 @@ import { BarChart3, Search, TrendingUp, Zap, Settings } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import RedditIcon from "@/components/icons/RedditIcon";
 import LinkedInIcon from "@/components/icons/LinkedInIcon";
+import TwitterIcon from "@/components/icons/TwitterIcon";
 
 const navSections = [
   {
@@ -17,6 +18,7 @@ const navSections = [
     items: [
       { title: "Reddit", icon: RedditIcon, url: "/reddit", color: "" },
       { title: "LinkedIn", icon: LinkedInIcon, url: "/linkedin", color: "" },
+      { title: "Twitter", icon: TwitterIcon, url: "/twitter", color: "" },
     ],
   },
   {
