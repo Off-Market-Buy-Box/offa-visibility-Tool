@@ -383,6 +383,137 @@ def do_post_comment(pw, email, password, post_url, text):
         browser.close()
 
 
+def do_batch_post(pw, email, password, posts, delay_seconds=30):
+    """Post replies to multiple tweets in one browser session."""
+    print("STEP:launching_browser", flush=True)
+    browser = launch_browser(pw)
+    page = browser.new_page()
+    page.add_init_script(
+        "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });"
+    )
+
+    results = []
+
+    try:
+        # === CHECK LOGIN ONCE ===
+        print("STEP:checking_session", flush=True)
+        page.goto("https://x.com/home", wait_until="domcontentloaded")
+        page.wait_for_timeout(3000)
+
+        if not is_logged_in(page):
+            print("STEP:not_logged_in_attempting_login", flush=True)
+            page.goto("https://x.com/i/flow/login", wait_until="domcontentloaded")
+            page.wait_for_timeout(3000)
+
+            try:
+                email_field = page.locator('input[autocomplete="username"]').first
+                if email_field.count() > 0 and email_field.is_visible():
+                    email_field.fill(email)
+                    next_btn = page.locator('button:has-text("Next")').first
+                    if next_btn.count() > 0:
+                        next_btn.click()
+                        page.wait_for_timeout(2000)
+                    pass_field = page.locator('input[type="password"]').first
+                    if pass_field.count() > 0 and pass_field.is_visible():
+                        pass_field.fill(password)
+                        login_btn = page.locator('button[data-testid="LoginForm_Login_Button"]').first
+                        if login_btn.count() > 0:
+                            login_btn.click()
+                            page.wait_for_timeout(4000)
+            except Exception as e:
+                print(json.dumps({"error": f"Auto-login failed: {e}. Use 'Login to X' button first."}))
+                sys.exit(1)
+
+            if not is_logged_in(page):
+                print("STEP:waiting_for_manual_verification", flush=True)
+                success = wait_for_login(page, timeout_seconds=120)
+                if not success:
+                    print(json.dumps({"error": "Login failed. Use 'Login to X' button first."}))
+                    sys.exit(1)
+
+            print("STEP:logged_in", flush=True)
+        else:
+            print("STEP:already_logged_in", flush=True)
+
+        # === LOOP THROUGH POSTS ===
+        for idx, post_data in enumerate(posts):
+            post_url = post_data["post_url"]
+            text = post_data["text"]
+            post_id = post_data.get("id", idx)
+
+            print(f"STEP:batch_post_{idx+1}_of_{len(posts)}", flush=True)
+
+            try:
+                page.goto(post_url, wait_until="domcontentloaded")
+                page.wait_for_timeout(5000)
+
+                if "/login" in page.url or "/i/flow" in page.url:
+                    results.append({"id": post_id, "error": "Redirected to login — session expired."})
+                    continue
+
+                # Scroll & expand reply box
+                page.evaluate("window.scrollTo(0, 400)")
+                page.wait_for_timeout(2000)
+
+                page.evaluate("""
+                    () => {
+                        const replyArea = document.querySelector(
+                            'div[data-testid="tweetTextarea_0"], div[role="textbox"]'
+                        );
+                        if (replyArea) replyArea.click();
+                    }
+                """)
+                page.wait_for_timeout(2000)
+
+                box = _find_reply_box(page)
+                if not box:
+                    page.evaluate("window.scrollTo(0, 300)")
+                    page.wait_for_timeout(3000)
+                    box = _find_reply_box(page)
+
+                if not box:
+                    results.append({"id": post_id, "error": "Cannot find reply box"})
+                    continue
+
+                # Type
+                page.mouse.click(box["x"], box["y"])
+                page.wait_for_timeout(500)
+                typed = _type_into_reply_box(page, text)
+                if not typed:
+                    page.mouse.click(box["x"] + 5, box["y"] + 5)
+                    page.wait_for_timeout(500)
+                    typed = _type_into_reply_box(page, text)
+
+                if not typed:
+                    results.append({"id": post_id, "error": "Text verification failed"})
+                    continue
+
+                page.wait_for_timeout(1500)
+
+                # Submit
+                submitted = _click_reply_button(page)
+                if not submitted:
+                    results.append({"id": post_id, "error": "Cannot find reply button"})
+                    continue
+
+                page.wait_for_timeout(6000)
+                results.append({"id": post_id, "posted": True, "method": "browser", "comment_url": page.url})
+                print(f"STEP:batch_post_{idx+1}_done", flush=True)
+
+            except Exception as e:
+                results.append({"id": post_id, "error": str(e)})
+
+            if idx < len(posts) - 1:
+                print(f"STEP:waiting_{delay_seconds}s", flush=True)
+                time.sleep(delay_seconds)
+
+    finally:
+        page.close()
+        browser.close()
+
+    print(json.dumps({"batch_results": results}))
+
+
 def main():
     if len(sys.argv) < 2:
         print(json.dumps({"error": "No arguments provided"}))
@@ -399,6 +530,7 @@ def main():
     post_url = args.get("post_url", "")
     text = args.get("text", "")
     login_only = args.get("login_only", False)
+    batch_posts = args.get("batch_posts", None)
 
     try:
         from playwright.sync_api import sync_playwright
@@ -413,6 +545,9 @@ def main():
 
         if login_only:
             do_login_only(pw, email, password)
+        elif batch_posts:
+            delay = args.get("delay_seconds", 30)
+            do_batch_post(pw, email, password, batch_posts, delay)
         else:
             if not all([post_url, text]):
                 print(json.dumps({"error": "Missing post_url or text"}))

@@ -594,6 +594,210 @@ def do_post_comment(pw, username, password, post_url, text):
         browser.close()
 
 
+def do_batch_post(pw, username, password, posts, delay_seconds=30):
+    """Post comments to multiple Reddit threads in one browser session."""
+    print("STEP:launching_browser", flush=True)
+    browser = launch_browser(pw)
+    page = browser.new_page()
+    page.add_init_script(
+        "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });"
+    )
+
+    results = []
+
+    try:
+        # === CHECK LOGIN ONCE ===
+        print("STEP:checking_session", flush=True)
+        page.goto("https://www.reddit.com/", wait_until="domcontentloaded")
+        page.wait_for_timeout(3000)
+
+        if not is_logged_in(page):
+            print("STEP:not_logged_in_attempting_login", flush=True)
+            page.goto("https://www.reddit.com/login/", wait_until="domcontentloaded")
+            page.wait_for_timeout(2000)
+
+            body_text = page.inner_text("body")
+            has_captcha = (
+                "Prove your humanity" in body_text
+                or "not a robot" in body_text.lower()
+            )
+
+            if has_captcha:
+                print("STEP:captcha_detected_waiting", flush=True)
+                success = wait_for_login(page, timeout_seconds=120)
+                if not success:
+                    print(json.dumps({
+                        "error": "Not logged in and CAPTCHA detected. "
+                                 "Use 'Login to Reddit' button first."
+                    }))
+                    sys.exit(1)
+            else:
+                try:
+                    for sel in ['#login-username', 'input[name="username"]']:
+                        el = page.locator(sel).first
+                        if el.count() > 0 and el.is_visible():
+                            el.fill(username)
+                            break
+                    for sel in ['#login-password', 'input[name="password"]']:
+                        el = page.locator(sel).first
+                        if el.count() > 0 and el.is_visible():
+                            el.fill(password)
+                            break
+                    for sel in ['button[type="submit"]', 'button:has-text("Log In")']:
+                        el = page.locator(sel).first
+                        if el.count() > 0 and el.is_visible():
+                            el.click()
+                            break
+                    page.wait_for_timeout(6000)
+                except Exception as e:
+                    print(json.dumps({
+                        "error": f"Auto-login failed: {e}. "
+                                 "Use 'Login to Reddit' button first."
+                    }))
+                    sys.exit(1)
+
+                if "/login" in page.url:
+                    print(json.dumps({
+                        "error": "Login failed. Use 'Login to Reddit' button first."
+                    }))
+                    sys.exit(1)
+
+            print("STEP:logged_in", flush=True)
+        else:
+            print("STEP:already_logged_in", flush=True)
+
+        # === LOOP THROUGH POSTS ===
+        for idx, post_data in enumerate(posts):
+            post_url = post_data["post_url"]
+            text = post_data["text"]
+            post_id = post_data.get("id", idx)
+
+            print(f"STEP:batch_post_{idx+1}_of_{len(posts)}", flush=True)
+
+            try:
+                print("STEP:navigating_to_post", flush=True)
+                page.goto(post_url, wait_until="domcontentloaded")
+                page.wait_for_timeout(5000)
+
+                if "/login" in page.url:
+                    results.append({"id": post_id, "error": "Redirected to login — session expired."})
+                    continue
+
+                # Scroll to comment area
+                page.evaluate("window.scrollTo(0, 300)")
+                page.wait_for_timeout(2000)
+
+                # Activate comment box
+                page.evaluate("""
+                    () => {
+                        const composer = document.querySelector('shreddit-composer');
+                        if (composer) {
+                            composer.click();
+                            if (composer.shadowRoot) {
+                                const placeholder = composer.shadowRoot.querySelector(
+                                    '[placeholder], [data-placeholder], .placeholder, p'
+                                );
+                                if (placeholder) placeholder.click();
+                                const editorArea = composer.shadowRoot.querySelector(
+                                    '[contenteditable], [role="textbox"], .DraftEditor-root, '
+                                    + '.public-DraftEditor-content, .notranslate, .ql-editor'
+                                );
+                                if (editorArea) editorArea.click();
+                            }
+                        }
+                        const addComment = document.querySelector(
+                            '[placeholder="Add a comment"], [data-testid="comment-composer"]'
+                        );
+                        if (addComment) addComment.click();
+                    }
+                """)
+                page.wait_for_timeout(2000)
+
+                box = _find_and_activate_comment_box(page)
+                if not box:
+                    page.wait_for_timeout(3000)
+                    page.evaluate("""
+                        () => {
+                            const composer = document.querySelector('shreddit-composer');
+                            if (composer) {
+                                composer.click();
+                                if (composer.shadowRoot) {
+                                    const divs = composer.shadowRoot.querySelectorAll('div');
+                                    for (const d of divs) {
+                                        const rect = d.getBoundingClientRect();
+                                        if (rect.height > 30 && rect.width > 200) { d.click(); break; }
+                                    }
+                                }
+                            }
+                        }
+                    """)
+                    page.wait_for_timeout(2000)
+                    box = _find_and_activate_comment_box(page)
+
+                if not box:
+                    # Try old Reddit
+                    old_url = post_url.replace("www.reddit.com", "old.reddit.com")
+                    page.goto(old_url, wait_until="domcontentloaded")
+                    page.wait_for_timeout(4000)
+                    textarea = page.locator('textarea[name="text"], .usertext-edit textarea').first
+                    if textarea.count() > 0 and textarea.is_visible():
+                        textarea.click()
+                        textarea.fill(text)
+                        page.wait_for_timeout(1000)
+                        submit = page.locator(
+                            'button[type="submit"]:has-text("save"), .save-button button, button:has-text("save")'
+                        ).first
+                        if submit.count() > 0 and submit.is_visible():
+                            submit.click()
+                            page.wait_for_timeout(5000)
+                            results.append({"id": post_id, "posted": True, "method": "browser-old-reddit", "comment_url": page.url})
+                            if idx < len(posts) - 1:
+                                time.sleep(delay_seconds)
+                            continue
+                    results.append({"id": post_id, "error": "Cannot find comment box"})
+                    continue
+
+                # Type comment
+                page.mouse.click(box["x"], box["y"])
+                page.wait_for_timeout(500)
+                typed = _type_into_comment_box(page, text)
+                if not typed:
+                    page.mouse.click(box["x"] + 5, box["y"] + 5)
+                    page.wait_for_timeout(500)
+                    typed = _type_into_comment_box(page, text)
+
+                if not typed:
+                    results.append({"id": post_id, "error": "Text verification failed"})
+                    continue
+
+                page.wait_for_timeout(1500)
+
+                # Submit
+                submitted = _click_submit_button(page)
+                if not submitted:
+                    results.append({"id": post_id, "error": "Cannot find submit button"})
+                    continue
+
+                page.wait_for_timeout(6000)
+
+                results.append({"id": post_id, "posted": True, "method": "browser", "comment_url": page.url})
+                print(f"STEP:batch_post_{idx+1}_done", flush=True)
+
+            except Exception as e:
+                results.append({"id": post_id, "error": str(e)})
+
+            # Delay between posts (not after the last one)
+            if idx < len(posts) - 1:
+                print(f"STEP:waiting_{delay_seconds}s", flush=True)
+                time.sleep(delay_seconds)
+
+    finally:
+        page.close()
+        browser.close()
+
+    print(json.dumps({"batch_results": results}))
+
+
 def main():
     if len(sys.argv) < 2:
         print(json.dumps({"error": "No arguments provided"}))
@@ -610,6 +814,7 @@ def main():
     post_url = args.get("post_url", "")
     text = args.get("text", "")
     login_only = args.get("login_only", False)
+    batch_posts = args.get("batch_posts", None)
 
     try:
         from playwright.sync_api import sync_playwright
@@ -624,6 +829,9 @@ def main():
 
         if login_only:
             do_login_only(pw, username, password)
+        elif batch_posts:
+            delay = args.get("delay_seconds", 30)
+            do_batch_post(pw, username, password, batch_posts, delay)
         else:
             if not all([post_url, text]):
                 print(json.dumps({"error": "Missing post_url or text"}))

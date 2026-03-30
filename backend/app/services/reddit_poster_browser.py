@@ -15,6 +15,10 @@ _executor = ThreadPoolExecutor(max_workers=2)
 
 
 def _run_poster_subprocess(python_exe: str, script_path: str, args_json: str) -> dict:
+    return _run_poster_subprocess_with_timeout(python_exe, script_path, args_json, 180)
+
+
+def _run_poster_subprocess_with_timeout(python_exe: str, script_path: str, args_json: str, timeout: int = 180) -> dict:
     """
     Pure synchronous function — runs in a thread, zero asyncio involvement.
     Uses subprocess.Popen with plain pipes.
@@ -25,7 +29,7 @@ def _run_poster_subprocess(python_exe: str, script_path: str, args_json: str) ->
         stderr=subprocess.PIPE,
     )
 
-    stdout_bytes, stderr_bytes = proc.communicate(timeout=180)
+    stdout_bytes, stderr_bytes = proc.communicate(timeout=timeout)
 
     stdout = stdout_bytes.decode("utf-8", errors="replace").strip()
     stderr = stderr_bytes.decode("utf-8", errors="replace").strip()
@@ -103,6 +107,34 @@ class RedditPosterBrowser:
             args_json,
         )
         return result
+
+    async def post_comments_batch(self, posts: list, delay_seconds: int = 30) -> list:
+        """Post comments to multiple threads in one browser session.
+        posts: list of {"id": int, "post_url": str, "text": str}
+        Returns list of result dicts per post.
+        """
+        if not self.username or not self.password:
+            raise RuntimeError("REDDIT_USERNAME and REDDIT_PASSWORD must be set in .env")
+
+        args_json = json.dumps({
+            "username": self.username,
+            "password": self.password,
+            "batch_posts": posts,
+            "delay_seconds": delay_seconds,
+        })
+
+        loop = asyncio.get_running_loop()
+        # Increase timeout for batch: 180s per post
+        timeout = max(300, len(posts) * 180 + len(posts) * delay_seconds)
+        result = await loop.run_in_executor(
+            _executor,
+            _run_poster_subprocess_with_timeout,
+            sys.executable,
+            _SCRIPT_PATH,
+            args_json,
+            timeout,
+        )
+        return result.get("batch_results", [])
 
     async def close(self):
         pass
