@@ -26,15 +26,23 @@ class LinkedInAgent:
     def _has_credentials(self) -> bool:
         return all([settings.LINKEDIN_EMAIL, settings.LINKEDIN_PASSWORD])
 
-    async def _get_poster(self):
-        if not self._has_credentials():
+    async def _get_poster(self, db=None):
+        from app.core.credentials import get_platform_credentials
+        if db:
+            creds = await get_platform_credentials("linkedin", db)
+            email = creds.get("email", "")
+            password = creds.get("password", "")
+        else:
+            email = settings.LINKEDIN_EMAIL
+            password = settings.LINKEDIN_PASSWORD
+        if not email or not password:
             raise ValueError(
                 "No LinkedIn credentials configured. "
-                "Set LINKEDIN_EMAIL + LINKEDIN_PASSWORD in .env"
+                "Set them in Profile."
             )
         if self._browser_poster is None:
             from app.services.linkedin_poster_browser import LinkedInPosterBrowser
-            self._browser_poster = LinkedInPosterBrowser()
+            self._browser_poster = LinkedInPosterBrowser(email=email, password=password)
         return self._browser_poster
 
     async def run(
@@ -56,7 +64,7 @@ class LinkedInAgent:
 
         if not dry_run:
             await emit({"type": "log", "emoji": "🔧", "message": "Checking LinkedIn credentials..."})
-            poster = await self._get_poster()
+            poster = await self._get_poster(db)
             await emit({"type": "log", "emoji": "🤖", "message": "Using browser mode for LinkedIn posting"})
         else:
             await emit({"type": "log", "emoji": "📝", "message": "Dry run mode — will generate but not post"})

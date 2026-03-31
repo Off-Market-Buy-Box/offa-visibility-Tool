@@ -6,11 +6,7 @@ import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from app.core.config import settings
 
-
-# Path to the standalone Playwright script
-_SCRIPT_PATH = os.path.join(os.path.dirname(__file__), "_linkedin_playwright_poster.py")
-
-# Dedicated thread pool
+_SCRIPT_PATH = os.path.join(os.path.dirname(__file__), "_facebook_playwright_poster.py")
 _executor = ThreadPoolExecutor(max_workers=2)
 
 
@@ -19,20 +15,18 @@ def _run_poster_subprocess(python_exe: str, script_path: str, args_json: str) ->
 
 
 def _run_poster_subprocess_with_timeout(python_exe: str, script_path: str, args_json: str, timeout: int = 180) -> dict:
-    """Pure synchronous function — runs in a thread, zero asyncio involvement."""
     proc = subprocess.Popen(
         [python_exe, script_path, args_json],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
-
     stdout_bytes, stderr_bytes = proc.communicate(timeout=timeout)
     stdout = stdout_bytes.decode("utf-8", errors="replace").strip()
     stderr = stderr_bytes.decode("utf-8", errors="replace").strip()
 
     for line in stdout.split("\n"):
         if line.startswith("STEP:"):
-            print(f"  🔄 LinkedIn Browser: {line.replace('STEP:', '')}")
+            print(f"  🔄 Facebook Browser: {line.replace('STEP:', '')}")
 
     json_line = None
     for line in reversed(stdout.split("\n")):
@@ -68,22 +62,14 @@ def _run_poster_subprocess_with_timeout(python_exe: str, script_path: str, args_
     raise RuntimeError(f"No valid JSON from browser. stdout: {stdout[:500]}")
 
 
-class LinkedInPosterBrowser:
-    """
-    Playwright-based LinkedIn poster that runs in a completely separate
-    Python subprocess via a thread pool.
-    """
-
+class FacebookPosterBrowser:
     def __init__(self, email: str = None, password: str = None):
-        self.email = email or settings.LINKEDIN_EMAIL
-        self.password = password or settings.LINKEDIN_PASSWORD
+        self.email = email or settings.FACEBOOK_EMAIL
+        self.password = password or settings.FACEBOOK_PASSWORD
 
     async def post_comment(self, post_url: str, text: str) -> dict:
-        """Post a comment by spawning a subprocess with Playwright"""
         if not self.email or not self.password:
-            raise RuntimeError(
-                "LINKEDIN_EMAIL and LINKEDIN_PASSWORD must be set in .env"
-            )
+            raise RuntimeError("FACEBOOK_EMAIL and FACEBOOK_PASSWORD must be set in .env")
 
         args_json = json.dumps({
             "email": self.email,
@@ -103,9 +89,9 @@ class LinkedInPosterBrowser:
         return result
 
     async def post_comments_batch(self, posts: list, delay_seconds: int = 30) -> list:
-        """Post comments to multiple LinkedIn posts in one browser session."""
+        """Post comments to multiple Facebook posts in one browser session."""
         if not self.email or not self.password:
-            raise RuntimeError("LINKEDIN_EMAIL and LINKEDIN_PASSWORD must be set in .env")
+            raise RuntimeError("FACEBOOK_EMAIL and FACEBOOK_PASSWORD must be set in .env")
 
         args_json = json.dumps({
             "email": self.email,
@@ -134,7 +120,7 @@ class LinkedInPosterBrowser:
             return {
                 "authenticated": False,
                 "method": "browser",
-                "error": "LINKEDIN_EMAIL and LINKEDIN_PASSWORD not set in .env",
+                "error": "FACEBOOK_EMAIL and FACEBOOK_PASSWORD not set in .env",
             }
         return {
             "authenticated": True,

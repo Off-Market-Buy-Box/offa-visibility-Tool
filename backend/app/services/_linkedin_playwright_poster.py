@@ -100,18 +100,6 @@ def do_login_only(pw, email, password):
         page.goto("https://www.linkedin.com/login", wait_until="domcontentloaded")
         page.wait_for_timeout(2000)
 
-        # Try to fill credentials
-        print("STEP:filling_credentials", flush=True)
-        try:
-            email_field = page.locator('#username').first
-            if email_field.count() > 0 and email_field.is_visible():
-                email_field.fill(email)
-            pass_field = page.locator('#password').first
-            if pass_field.count() > 0 and pass_field.is_visible():
-                pass_field.fill(password)
-        except Exception:
-            pass
-
         print("STEP:waiting_for_manual_login", flush=True)
         success = wait_for_login(page, timeout_seconds=180)
 

@@ -93,28 +93,6 @@ def do_login_only(pw, email, password):
         page.goto("https://x.com/i/flow/login", wait_until="domcontentloaded")
         page.wait_for_timeout(3000)
 
-        # Try to fill email
-        print("STEP:filling_credentials", flush=True)
-        try:
-            email_field = page.locator('input[autocomplete="username"]').first
-            if email_field.count() > 0 and email_field.is_visible():
-                email_field.fill(email)
-                # Click Next
-                next_btn = page.locator('button:has-text("Next")').first
-                if next_btn.count() > 0 and next_btn.is_visible():
-                    next_btn.click()
-                    page.wait_for_timeout(2000)
-                # Fill password
-                pass_field = page.locator('input[type="password"]').first
-                if pass_field.count() > 0 and pass_field.is_visible():
-                    pass_field.fill(password)
-                    login_btn = page.locator('button[data-testid="LoginForm_Login_Button"]').first
-                    if login_btn.count() > 0 and login_btn.is_visible():
-                        login_btn.click()
-                        page.wait_for_timeout(3000)
-        except Exception:
-            pass
-
         print("STEP:waiting_for_manual_login", flush=True)
         success = wait_for_login(page, timeout_seconds=180)
 

@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     TWITTER_EMAIL: str = ""
     TWITTER_PASSWORD: str = ""
     
+    FACEBOOK_EMAIL: str = ""
+    FACEBOOK_PASSWORD: str = ""
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

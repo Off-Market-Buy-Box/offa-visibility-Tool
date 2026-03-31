@@ -18,6 +18,12 @@ from app.models.ranking import Ranking
 from app.models.competitor import Competitor
 from app.models.reddit_mention import RedditMention
 from app.models.smart_task import SmartTask
+from app.models.linkedin_post import LinkedInPost
+from app.models.twitter_post import TwitterPost
+from app.models.facebook_post import FacebookPost
+from app.models.ai_metadata import AIMetadata
+from app.models.generated_response import GeneratedResponse
+from app.models.platform_credential import PlatformCredential
 from app.core.database import Base
 
 async def create_tables():

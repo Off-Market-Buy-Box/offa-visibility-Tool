@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { MessageSquare, TrendingUp, Eye, ArrowUpRight, Loader2, X, ChevronLeft, ChevronRight, Brain, Sparkles, FileText, Copy, Check, Send, Bot } from "lucide-react";
 import { useState, useEffect } from "react";
 import { redditService, type RedditMention, type RedditComment } from "@/services/redditService";
+import CredentialsBanner from "@/components/CredentialsBanner";
 import { aiService, type AIMetadata, type GeneratedResponse } from "@/services/aiService";
 import { useToast } from "@/hooks/use-toast";
 
@@ -62,7 +63,6 @@ const Reddit = () => {
   const [agentCleanup, setAgentCleanup] = useState<(() => void) | null>(null);
   const [agentPosts, setAgentPosts] = useState<Array<any>>([]);
   const [expandedPost, setExpandedPost] = useState<number | null>(null);
-  const [browserLoggingIn, setBrowserLoggingIn] = useState(false);
 
   // Filters
   const [filterSubreddit, setFilterSubreddit] = useState<string>("all");
@@ -379,25 +379,6 @@ const Reddit = () => {
                 <Button onClick={handleRunAgent} disabled={agentRunning} className="w-full">
                   {agentRunning ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" />Agent Running...</>) : (<><Bot className="h-4 w-4 mr-2" />Run Agent</>)}
                 </Button>
-                
-                  <Button
-                    variant="outline"
-                    className="w-full text-xs"
-                    disabled={browserLoggingIn}
-                    onClick={async () => {
-                      setBrowserLoggingIn(true);
-                      try {
-                        await redditService.browserLogin();
-                        toast({ title: "Logged in!", description: "Reddit session saved. You can now post." });
-                      } catch (e: any) {
-                        toast({ title: "Login Issue", description: e.message || "Solve CAPTCHA in the browser window", variant: "destructive" });
-                      } finally {
-                        setBrowserLoggingIn(false);
-                      }
-                    }}
-                  >
-                    {browserLoggingIn ? (<><Loader2 className="h-3 w-3 mr-1 animate-spin" />Browser opening — solve CAPTCHA...</>) : "🔐 Login to Reddit (first time setup)"}
-                  </Button>
 
                 {/* Live Activity Log */}
                 {agentLogs.length > 0 && (
@@ -539,6 +520,7 @@ const Reddit = () => {
       </div>
 
       {/* Filters */}
+      <CredentialsBanner platform="reddit" label="Reddit" />
       <div className="flex items-center gap-3 text-xs text-muted-foreground mb-2">
         <span>All ({mentions.length})</span>
         <span>·</span>

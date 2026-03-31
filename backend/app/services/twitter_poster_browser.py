@@ -63,9 +63,9 @@ def _run_poster_subprocess_with_timeout(python_exe: str, script_path: str, args_
 
 
 class TwitterPosterBrowser:
-    def __init__(self):
-        self.email = settings.TWITTER_EMAIL
-        self.password = settings.TWITTER_PASSWORD
+    def __init__(self, email: str = None, password: str = None):
+        self.email = email or settings.TWITTER_EMAIL
+        self.password = password or settings.TWITTER_PASSWORD
 
     async def post_comment(self, post_url: str, text: str) -> dict:
         if not self.email or not self.password:

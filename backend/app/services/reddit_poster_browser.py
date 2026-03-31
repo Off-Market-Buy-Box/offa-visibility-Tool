@@ -80,9 +80,9 @@ class RedditPosterBrowser:
     Python subprocess via a thread pool — zero asyncio involvement.
     """
 
-    def __init__(self):
-        self.username = settings.REDDIT_USERNAME
-        self.password = settings.REDDIT_PASSWORD
+    def __init__(self, username: str = None, password: str = None):
+        self.username = username or settings.REDDIT_USERNAME
+        self.password = password or settings.REDDIT_PASSWORD
 
     async def post_comment(self, post_url: str, text: str) -> dict:
         """Post a comment by spawning a subprocess with Playwright"""

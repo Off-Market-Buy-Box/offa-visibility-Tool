@@ -164,47 +164,24 @@ async def post_comment(
 
 
 @router.get("/auth-status")
-async def reddit_auth_status():
-    """Check if Reddit credentials are configured (API or browser)"""
-    has_api = _has_api_credentials()
-    has_browser = all([settings.REDDIT_USERNAME, settings.REDDIT_PASSWORD])
-
-    if has_api:
-        try:
-            from app.services.reddit_poster import RedditPoster
-            poster = RedditPoster()
-            result = await poster.verify_credentials()
-            result["method"] = "api"
-            return result
-        except Exception:
-            pass
-
-    if has_browser:
-        return {
-            "authenticated": True,
-            "method": "browser",
-            "username": settings.REDDIT_USERNAME,
-            "note": "Browser mode ready. Will open Chromium to post.",
-        }
-
-    return {"authenticated": False, "error": "No Reddit credentials configured"}
+async def reddit_auth_status(db: AsyncSession = Depends(get_db)):
+    from app.core.login_status import is_logged_in
+    logged_in = await is_logged_in(db, "reddit")
+    if logged_in:
+        return {"authenticated": True, "method": "browser", "note": "Logged in."}
+    return {"authenticated": False, "error": "Not logged in. Go to Profile and click Login."}
 
 
 @router.post("/browser-login")
-async def browser_login():
-    """Open browser for manual Reddit login (solve CAPTCHA, save session)"""
-    if not settings.REDDIT_USERNAME or not settings.REDDIT_PASSWORD:
-        raise HTTPException(status_code=400, detail="REDDIT_USERNAME and REDDIT_PASSWORD not set in .env")
-
+async def browser_login(db: AsyncSession = Depends(get_db)):
+    """Open browser for manual Reddit login — user fills credentials themselves."""
     import subprocess as sp
-    import os
 
-    # Use the same path constant as reddit_poster_browser.py
     from app.services.reddit_poster_browser import _SCRIPT_PATH
     script_path = _SCRIPT_PATH
     args_json = json.dumps({
-        "username": settings.REDDIT_USERNAME,
-        "password": settings.REDDIT_PASSWORD,
+        "username": "",
+        "password": "",
         "post_url": "",
         "text": "",
         "login_only": True,
@@ -234,6 +211,8 @@ async def browser_login():
 
         if returncode == 0 and json_line:
             data = json.loads(json_line)
+            from app.core.login_status import set_logged_in
+            await set_logged_in(db, "reddit", True)
             return {"message": "Login successful! Session saved.", **data}
         elif json_line:
             data = json.loads(json_line)

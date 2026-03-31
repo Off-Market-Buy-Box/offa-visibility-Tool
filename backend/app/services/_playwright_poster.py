@@ -92,32 +92,7 @@ def do_login_only(pw, username, password):
         page.goto("https://www.reddit.com/login/", wait_until="domcontentloaded")
         page.wait_for_timeout(2000)
 
-        body_text = page.inner_text("body")
-        has_captcha = (
-            "Prove your humanity" in body_text
-            or "not a robot" in body_text.lower()
-        )
-
-        if has_captcha:
-            print("STEP:captcha_detected_solve_manually", flush=True)
-            print("STEP:waiting_up_to_3_min_for_login", flush=True)
-        else:
-            print("STEP:filling_credentials", flush=True)
-            try:
-                for sel in ['#login-username', 'input[name="username"]']:
-                    el = page.locator(sel).first
-                    if el.count() > 0 and el.is_visible():
-                        el.fill(username)
-                        break
-                for sel in ['#login-password', 'input[name="password"]']:
-                    el = page.locator(sel).first
-                    if el.count() > 0 and el.is_visible():
-                        el.fill(password)
-                        break
-            except Exception:
-                pass
-            print("STEP:waiting_for_manual_login", flush=True)
-
+        print("STEP:waiting_for_manual_login", flush=True)
         success = wait_for_login(page, timeout_seconds=180)
 
         if success:

@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Briefcase, TrendingUp, Eye, ArrowUpRight, Loader2, X, ChevronLeft, ChevronRight, Sparkles, Copy, Check, Brain, Bot, Send } from "lucide-react";
 import { useState, useEffect } from "react";
 import { linkedinService, type LinkedInPost } from "@/services/linkedinService";
+import CredentialsBanner from "@/components/CredentialsBanner";
 import { aiService, type AIMetadata } from "@/services/aiService";
 import { useToast } from "@/hooks/use-toast";
 
@@ -59,7 +60,6 @@ const LinkedIn = () => {
   const [agentCleanup, setAgentCleanup] = useState<(() => void) | null>(null);
   const [agentPosts, setAgentPosts] = useState<Array<any>>([]);
   const [expandedPost, setExpandedPost] = useState<number | null>(null);
-  const [browserLoggingIn, setBrowserLoggingIn] = useState(false);
 
   useEffect(() => { fetchPosts(); }, []);
 
@@ -338,25 +338,6 @@ const LinkedIn = () => {
                   {agentRunning ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" />Agent Running...</>) : (<><Bot className="h-4 w-4 mr-2" />Run Agent</>)}
                 </Button>
 
-                <Button
-                  variant="outline"
-                  className="w-full text-xs"
-                  disabled={browserLoggingIn}
-                  onClick={async () => {
-                    setBrowserLoggingIn(true);
-                    try {
-                      await linkedinService.browserLogin();
-                      toast({ title: "Logged in!", description: "LinkedIn session saved. You can now post." });
-                    } catch (e: any) {
-                      toast({ title: "Login Issue", description: e.message || "Complete verification in the browser window", variant: "destructive" });
-                    } finally {
-                      setBrowserLoggingIn(false);
-                    }
-                  }}
-                >
-                  {browserLoggingIn ? (<><Loader2 className="h-3 w-3 mr-1 animate-spin" />Browser opening — complete verification...</>) : "🔐 Login to LinkedIn (first time setup)"}
-                </Button>
-
                 {agentLogs.length > 0 && (
                   <div className="bg-black/40 rounded-lg p-3 space-y-0.5 text-[11px] max-h-[160px] overflow-y-auto font-mono border border-border" ref={(el) => { if (el) el.scrollTop = el.scrollHeight; }}>
                     <div className="text-muted-foreground mb-1.5 text-[10px] uppercase tracking-wider flex items-center gap-2">
@@ -469,6 +450,7 @@ const LinkedIn = () => {
       </div>
 
       {/* Stats */}
+      <CredentialsBanner platform="linkedin" label="LinkedIn" />
       <div className="flex items-center gap-4 text-xs text-muted-foreground mb-2">
         <span>All ({posts.length})</span>
       </div>

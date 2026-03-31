@@ -125,33 +125,24 @@ async def post_comment(
 
 
 @router.get("/auth-status")
-async def linkedin_auth_status():
-    """Check if LinkedIn credentials are configured"""
-    has_creds = all([settings.LINKEDIN_EMAIL, settings.LINKEDIN_PASSWORD])
-    if has_creds:
-        return {
-            "authenticated": True,
-            "method": "browser",
-            "email": settings.LINKEDIN_EMAIL,
-            "note": "Browser mode ready. Will open Chromium to post.",
-        }
-    return {"authenticated": False, "error": "No LinkedIn credentials configured"}
+async def linkedin_auth_status(db: AsyncSession = Depends(get_db)):
+    from app.core.login_status import is_logged_in
+    logged_in = await is_logged_in(db, "linkedin")
+    if logged_in:
+        return {"authenticated": True, "method": "browser", "note": "Logged in."}
+    return {"authenticated": False, "error": "Not logged in. Go to Profile and click Login."}
 
 
 @router.post("/browser-login")
-async def browser_login():
-    """Open browser for manual LinkedIn login (solve verification, save session)"""
-    if not settings.LINKEDIN_EMAIL or not settings.LINKEDIN_PASSWORD:
-        raise HTTPException(status_code=400, detail="LINKEDIN_EMAIL and LINKEDIN_PASSWORD not set in .env")
-
+async def browser_login(db: AsyncSession = Depends(get_db)):
+    """Open browser for manual LinkedIn login — user fills credentials themselves."""
     import subprocess as sp
-    import os
 
     from app.services.linkedin_poster_browser import _SCRIPT_PATH
     script_path = _SCRIPT_PATH
     args_json = json.dumps({
-        "email": settings.LINKEDIN_EMAIL,
-        "password": settings.LINKEDIN_PASSWORD,
+        "email": "",
+        "password": "",
         "post_url": "",
         "text": "",
         "login_only": True,
@@ -180,6 +171,8 @@ async def browser_login():
 
         if returncode == 0 and json_line:
             data = json.loads(json_line)
+            from app.core.login_status import set_logged_in
+            await set_logged_in(db, "linkedin", True)
             return {"message": "Login successful! Session saved.", **data}
         elif json_line:
             data = json.loads(json_line)

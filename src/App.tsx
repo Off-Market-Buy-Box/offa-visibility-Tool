@@ -4,15 +4,12 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/ThemeProvider";
-import Index from "./pages/Index.tsx";
 import Keywords from "./pages/Keywords.tsx";
-import Competitors from "./pages/Competitors.tsx";
 import Reddit from "./pages/Reddit.tsx";
 import LinkedIn from "./pages/LinkedIn.tsx";
 import Twitter from "./pages/Twitter.tsx";
-import SmartTasks from "./pages/SmartTasks.tsx";
-import Settings from "./pages/Settings.tsx";
-import TestAPI from "./pages/TestAPI.tsx";
+import Facebook from "./pages/Facebook.tsx";
+import Profile from "./pages/Profile.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -25,15 +22,13 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
-            <Route path="/" element={<Index />} />
+            <Route path="/" element={<Keywords />} />
             <Route path="/keywords" element={<Keywords />} />
-            <Route path="/competitors" element={<Competitors />} />
             <Route path="/reddit" element={<Reddit />} />
             <Route path="/linkedin" element={<LinkedIn />} />
             <Route path="/twitter" element={<Twitter />} />
-            <Route path="/smart-tasks" element={<SmartTasks />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/test-api" element={<TestAPI />} />
+            <Route path="/facebook" element={<Facebook />} />
+            <Route path="/profile" element={<Profile />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

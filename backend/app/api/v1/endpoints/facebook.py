@@ -7,9 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from pydantic import BaseModel
 from app.core.database import get_db, AsyncSessionLocal
-from app.schemas.twitter import TwitterPostResponse
-from app.services.twitter_service import TwitterService
-from app.models.twitter_post import TwitterPost
+from app.schemas.facebook import FacebookPostResponse
+from app.services.facebook_service import FacebookService
+from app.models.facebook_post import FacebookPost
 from app.core.config import settings
 from sqlalchemy import select
 
@@ -17,35 +17,35 @@ router = APIRouter()
 
 
 @router.post("/monitor")
-async def monitor_twitter(
+async def monitor_facebook(
     keywords: Optional[List[str]] = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
-    """Search Twitter/X for real estate posts via Google/SerpAPI"""
-    service = TwitterService()
-    stats = await service.monitor_twitter(db, keywords)
-    return {"message": "Twitter monitoring completed", **stats}
+    """Search Facebook for real estate posts via Google/SerpAPI"""
+    service = FacebookService()
+    stats = await service.monitor_facebook(db, keywords)
+    return {"message": "Facebook monitoring completed", **stats}
 
 
-@router.get("/posts", response_model=List[TwitterPostResponse])
+@router.get("/posts", response_model=List[FacebookPostResponse])
 async def get_posts(
     skip: int = 0,
     limit: int = 100,
     db: AsyncSession = Depends(get_db),
 ):
     query = (
-        select(TwitterPost)
+        select(FacebookPost)
         .offset(skip).limit(limit)
-        .order_by(TwitterPost.created_at.desc())
+        .order_by(FacebookPost.created_at.desc())
     )
     result = await db.execute(query)
     return result.scalars().all()
 
 
-@router.get("/posts/{post_id}", response_model=TwitterPostResponse)
+@router.get("/posts/{post_id}", response_model=FacebookPostResponse)
 async def get_post(post_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(TwitterPost).where(TwitterPost.id == post_id)
+        select(FacebookPost).where(FacebookPost.id == post_id)
     )
     post = result.scalar_one_or_none()
     if not post:
@@ -56,7 +56,7 @@ async def get_post(post_id: int, db: AsyncSession = Depends(get_db)):
 @router.delete("/posts/{post_id}")
 async def delete_post(post_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(TwitterPost).where(TwitterPost.id == post_id)
+        select(FacebookPost).where(FacebookPost.id == post_id)
     )
     post = result.scalar_one_or_none()
     if not post:
@@ -69,13 +69,13 @@ async def delete_post(post_id: int, db: AsyncSession = Depends(get_db)):
 @router.post("/posts/{post_id}/fetch-content")
 async def fetch_post_content(post_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(TwitterPost).where(TwitterPost.id == post_id)
+        select(FacebookPost).where(FacebookPost.id == post_id)
     )
     post = result.scalar_one_or_none()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
 
-    service = TwitterService()
+    service = FacebookService()
     content = await service.fetch_post_content(post.url)
 
     if content:
@@ -83,7 +83,7 @@ async def fetch_post_content(post_id: int, db: AsyncSession = Depends(get_db)):
         await db.commit()
         return {"content": content, "success": True}
     else:
-        return {"content": None, "success": False, "message": "Could not extract content. The tweet may require login."}
+        return {"content": None, "success": False, "message": "Could not extract content. The post may require login."}
 
 
 class PostCommentRequest(BaseModel):
@@ -94,30 +94,30 @@ class PostCommentRequest(BaseModel):
 @router.post("/post-comment")
 async def post_comment(req: PostCommentRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(TwitterPost).where(TwitterPost.id == req.post_id)
+        select(FacebookPost).where(FacebookPost.id == req.post_id)
     )
     post = result.scalar_one_or_none()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
 
     try:
-        from app.services.twitter_poster_browser import TwitterPosterBrowser
-        poster = TwitterPosterBrowser()
+        from app.services.facebook_poster_browser import FacebookPosterBrowser
+        poster = FacebookPosterBrowser()
         try:
             comment = await poster.post_comment(post.url, req.text)
         finally:
             await poster.close()
-        return {"message": "Reply posted successfully", **comment}
+        return {"message": "Comment posted successfully", **comment}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to post reply: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to post comment: {str(e)}")
 
 
 @router.get("/auth-status")
-async def twitter_auth_status(db: AsyncSession = Depends(get_db)):
+async def facebook_auth_status(db: AsyncSession = Depends(get_db)):
     from app.core.login_status import is_logged_in
-    logged_in = await is_logged_in(db, "twitter")
+    logged_in = await is_logged_in(db, "facebook")
     if logged_in:
         return {"authenticated": True, "method": "browser", "note": "Logged in."}
     return {"authenticated": False, "error": "Not logged in. Go to Profile and click Login."}
@@ -125,9 +125,9 @@ async def twitter_auth_status(db: AsyncSession = Depends(get_db)):
 
 @router.post("/browser-login")
 async def browser_login(db: AsyncSession = Depends(get_db)):
-    """Open browser for manual Twitter login — user fills credentials themselves."""
+    """Open browser for manual Facebook login — user fills credentials themselves."""
     import subprocess as sp
-    from app.services.twitter_poster_browser import _SCRIPT_PATH
+    from app.services.facebook_poster_browser import _SCRIPT_PATH
 
     args_json = json.dumps({
         "email": "",
@@ -158,7 +158,7 @@ async def browser_login(db: AsyncSession = Depends(get_db)):
         if returncode == 0 and json_line:
             data = json.loads(json_line)
             from app.core.login_status import set_logged_in
-            await set_logged_in(db, "twitter", True)
+            await set_logged_in(db, "facebook", True)
             return {"message": "Login successful! Session saved.", **data}
         elif json_line:
             data = json.loads(json_line)
@@ -179,9 +179,9 @@ class RunAgentRequest(BaseModel):
 
 @router.post("/agent/run")
 async def run_agent(req: RunAgentRequest, db: AsyncSession = Depends(get_db)):
-    from app.services.twitter_agent import TwitterAgent
+    from app.services.facebook_agent import FacebookAgent
     try:
-        agent = TwitterAgent(delay_between_posts=req.delay_seconds)
+        agent = FacebookAgent(delay_between_posts=req.delay_seconds)
         stats = await agent.run(db, max_posts=req.max_posts, dry_run=req.dry_run)
         return {"message": "Agent run completed", **stats}
     except ValueError as e:
@@ -197,7 +197,7 @@ async def run_agent_stream(
     delay_seconds: int = 120,
     dry_run: bool = True,
 ):
-    from app.services.twitter_agent import TwitterAgent
+    from app.services.facebook_agent import FacebookAgent
 
     async def event_generator():
         log_queue: asyncio.Queue = asyncio.Queue()
@@ -208,7 +208,7 @@ async def run_agent_stream(
         async def run_agent_task():
             async with AsyncSessionLocal() as db:
                 try:
-                    agent = TwitterAgent(delay_between_posts=delay_seconds)
+                    agent = FacebookAgent(delay_between_posts=delay_seconds)
                     stats = await agent.run(
                         db, max_posts=max_posts, dry_run=dry_run, on_event=on_event
                     )
@@ -247,9 +247,9 @@ async def run_agent_stream(
 @router.get("/agent/pending")
 async def get_pending_posts(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(TwitterPost)
-        .where(TwitterPost.agent_posted == False)
-        .where(TwitterPost.is_relevant == True)
+        select(FacebookPost)
+        .where(FacebookPost.agent_posted == False)
+        .where(FacebookPost.is_relevant == True)
     )
     threads = result.scalars().all()
     return {"pending_count": len(threads)}

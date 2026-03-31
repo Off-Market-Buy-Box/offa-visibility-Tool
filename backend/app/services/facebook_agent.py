@@ -3,15 +3,15 @@ from datetime import datetime
 from typing import Callable, Coroutine, Dict, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from app.models.twitter_post import TwitterPost
+from app.models.facebook_post import FacebookPost
 from app.services.ai_service import AIService
 from app.core.config import settings
 
 
-class TwitterAgent:
+class FacebookAgent:
     """
     Automated agent that:
-    1. Picks unprocessed Twitter posts
+    1. Picks unprocessed Facebook posts
     2. Generates AI replies
     3. Posts them all in ONE browser session (batch mode)
     4. Marks posts as processed
@@ -23,25 +23,25 @@ class TwitterAgent:
         self._browser_poster = None
 
     def _has_credentials(self) -> bool:
-        return all([settings.TWITTER_EMAIL, settings.TWITTER_PASSWORD])
+        return all([settings.FACEBOOK_EMAIL, settings.FACEBOOK_PASSWORD])
 
     async def _get_poster(self, db=None):
         from app.core.credentials import get_platform_credentials
         if db:
-            creds = await get_platform_credentials("twitter", db)
+            creds = await get_platform_credentials("facebook", db)
             email = creds.get("email", "")
             password = creds.get("password", "")
         else:
-            email = settings.TWITTER_EMAIL
-            password = settings.TWITTER_PASSWORD
+            email = settings.FACEBOOK_EMAIL
+            password = settings.FACEBOOK_PASSWORD
         if not email or not password:
             raise ValueError(
-                "No Twitter credentials configured. "
+                "No Facebook credentials configured. "
                 "Set them in Profile."
             )
         if self._browser_poster is None:
-            from app.services.twitter_poster_browser import TwitterPosterBrowser
-            self._browser_poster = TwitterPosterBrowser(email=email, password=password)
+            from app.services.facebook_poster_browser import FacebookPosterBrowser
+            self._browser_poster = FacebookPosterBrowser(email=email, password=password)
         return self._browser_poster
 
     async def run(
@@ -62,28 +62,28 @@ class TwitterAgent:
         }
 
         if not dry_run:
-            await emit({"type": "log", "emoji": "🔧", "message": "Checking Twitter credentials..."})
+            await emit({"type": "log", "emoji": "🔧", "message": "Checking Facebook credentials..."})
             poster = await self._get_poster(db)
-            await emit({"type": "log", "emoji": "🤖", "message": "Using browser mode for Twitter posting"})
+            await emit({"type": "log", "emoji": "🤖", "message": "Using browser mode for Facebook posting"})
         else:
             await emit({"type": "log", "emoji": "📝", "message": "Dry run mode — will generate but not post"})
 
-        await emit({"type": "log", "emoji": "🔍", "message": "Fetching unprocessed tweets..."})
+        await emit({"type": "log", "emoji": "🔍", "message": "Fetching unprocessed Facebook posts..."})
         result = await db.execute(
-            select(TwitterPost)
-            .where(TwitterPost.agent_posted == False)
-            .where(TwitterPost.is_relevant == True)
-            .order_by(TwitterPost.created_at.desc())
+            select(FacebookPost)
+            .where(FacebookPost.agent_posted == False)
+            .where(FacebookPost.is_relevant == True)
+            .order_by(FacebookPost.created_at.desc())
             .limit(max_posts)
         )
         threads = result.scalars().all()
         stats["threads_found"] = len(threads)
 
         if not threads:
-            await emit({"type": "log", "emoji": "📭", "message": "No unprocessed tweets found"})
+            await emit({"type": "log", "emoji": "📭", "message": "No unprocessed Facebook posts found"})
             return stats
 
-        await emit({"type": "log", "emoji": "📋", "message": f"Found {len(threads)} tweets to process"})
+        await emit({"type": "log", "emoji": "📋", "message": f"Found {len(threads)} posts to process"})
 
         # Phase 1: Generate all AI responses
         batch_items = []
@@ -98,7 +98,7 @@ class TwitterAgent:
 
             try:
                 await emit({"type": "log", "emoji": "🧠", "message": f"[{i+1}/{len(threads)}] Generating reply for: {thread.title[:60]}..."})
-                response = await self.ai_service.generate_twitter_response(db, thread.id)
+                response = await self.ai_service.generate_facebook_response(db, thread.id)
                 stats["responses_generated"] += 1
                 post_info["response_content"] = response.content
                 await emit({"type": "post_response", "index": i, "post_id": thread.id, "response_content": response.content, "char_count": len(response.content)})
@@ -147,7 +147,7 @@ class TwitterAgent:
                 thread.agent_posted_at = datetime.utcnow()
                 post_info["status"] = "posted"
                 post_info["comment_url"] = r.get("comment_url", "")
-                await emit({"type": "log", "emoji": "✅", "message": "Posted on X!"})
+                await emit({"type": "log", "emoji": "✅", "message": "Posted on Facebook!"})
             else:
                 error_msg = r.get("error", "Unknown batch error")
                 stats["errors"].append(f"Post {thread.id}: {error_msg}")

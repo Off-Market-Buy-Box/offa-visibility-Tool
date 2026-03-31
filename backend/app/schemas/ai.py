@@ -8,6 +8,7 @@ class AIMetadataResponse(BaseModel):
     reddit_mention_id: Optional[int] = None
     linkedin_post_id: Optional[int] = None
     twitter_post_id: Optional[int] = None
+    facebook_post_id: Optional[int] = None
     intent: Optional[str] = None
     main_topic: Optional[str] = None
     summary: Optional[str] = None
@@ -26,6 +27,7 @@ class GeneratedResponseOut(BaseModel):
     reddit_mention_id: Optional[int] = None
     linkedin_post_id: Optional[int] = None
     twitter_post_id: Optional[int] = None
+    facebook_post_id: Optional[int] = None
     response_type: str
     content: str
     created_at: datetime
@@ -60,4 +62,12 @@ class AnalyzeTwitterRequest(BaseModel):
 
 
 class GenerateTwitterResponseRequest(BaseModel):
+    post_id: int
+
+
+class AnalyzeFacebookRequest(BaseModel):
+    post_id: int
+
+
+class GenerateFacebookResponseRequest(BaseModel):
     post_id: int

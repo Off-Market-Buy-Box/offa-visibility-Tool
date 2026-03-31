@@ -5,10 +5,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TrendingUp, Eye, ArrowUpRight, Loader2, X, ChevronLeft, ChevronRight, Sparkles, Copy, Check, Brain, Bot, Send } from "lucide-react";
-import TwitterIcon from "@/components/icons/TwitterIcon";
+import FacebookIcon from "@/components/icons/FacebookIcon";
 import CredentialsBanner from "@/components/CredentialsBanner";
 import { useState, useEffect } from "react";
-import { twitterService, type TwitterPost } from "@/services/twitterService";
+import { facebookService, type FacebookPost } from "@/services/facebookService";
 import { aiService, type AIMetadata } from "@/services/aiService";
 import { useToast } from "@/hooks/use-toast";
 
@@ -29,25 +29,23 @@ const SENTIMENT_COLORS: Record<string, string> = {
     mixed: "text-yellow-400",
 };
 
-const Twitter = () => {
-    const [posts, setPosts] = useState<TwitterPost[]>([]);
+const Facebook = () => {
+    const [posts, setPosts] = useState<FacebookPost[]>([]);
     const [loading, setLoading] = useState(true);
     const [monitoring, setMonitoring] = useState(false);
-    const [selectedPost, setSelectedPost] = useState<TwitterPost | null>(null);
+    const [selectedPost, setSelectedPost] = useState<FacebookPost | null>(null);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
     const [customKeywords, setCustomKeywords] = useState("");
     const { toast } = useToast();
 
-    // AI state
     const [aiMeta, setAiMeta] = useState<AIMetadata | null>(null);
     const [analyzing, setAnalyzing] = useState(false);
     const [generatingResponse, setGeneratingResponse] = useState(false);
     const [responseText, setResponseText] = useState("");
     const [copied, setCopied] = useState(false);
-    const [postingToTwitter, setPostingToTwitter] = useState(false);
+    const [postingToFacebook, setPostingToFacebook] = useState(false);
 
-    // Agent state
     const [agentDialogOpen, setAgentDialogOpen] = useState(false);
     const [agentRunning, setAgentRunning] = useState(false);
     const [agentMaxPosts, setAgentMaxPosts] = useState(1);
@@ -64,7 +62,7 @@ const Twitter = () => {
     const fetchPosts = async () => {
         try {
             setLoading(true);
-            const data = await twitterService.getPosts();
+            const data = await facebookService.getPosts();
             setPosts(data);
         } catch {
             setPosts([]);
@@ -76,11 +74,11 @@ const Twitter = () => {
     const handleMonitor = async () => {
         try {
             setMonitoring(true);
-            const result = await twitterService.monitor();
-            toast({ title: "Twitter Scan Complete", description: `Searched ${result.queries_searched} queries. Found ${result.total_found} posts. Saved ${result.new_saved} new.` });
+            const result = await facebookService.monitor();
+            toast({ title: "Facebook Scan Complete", description: `Searched ${result.queries_searched} queries. Found ${result.total_found} posts. Saved ${result.new_saved} new.` });
             fetchPosts();
         } catch {
-            toast({ title: "Error", description: "Failed to scan Twitter", variant: "destructive" });
+            toast({ title: "Error", description: "Failed to scan Facebook", variant: "destructive" });
         } finally {
             setMonitoring(false);
         }
@@ -90,7 +88,7 @@ const Twitter = () => {
         try {
             setMonitoring(true);
             const keywords = customKeywords.split(",").map(k => k.trim()).filter(Boolean);
-            const result = await twitterService.monitor(keywords);
+            const result = await facebookService.monitor(keywords);
             toast({ title: "Custom Scan Complete", description: `Found ${result.total_found} posts. Saved ${result.new_saved} new.` });
             setDialogOpen(false);
             setCustomKeywords("");
@@ -102,16 +100,16 @@ const Twitter = () => {
         }
     };
 
-    const handleSelectPost = async (post: TwitterPost) => {
+    const handleSelectPost = async (post: FacebookPost) => {
         setSelectedPost(post);
         setResponseText("");
         setAiMeta(null);
 
-        const meta = await aiService.getTwitterMetadata(post.id);
+        const meta = await aiService.getFacebookMetadata(post.id);
         if (meta) setAiMeta(meta);
 
         try {
-            const responses = await aiService.getTwitterResponses(post.id);
+            const responses = await aiService.getFacebookResponses(post.id);
             if (Array.isArray(responses) && responses.length > 0) {
                 setResponseText(responses[0].content);
             }
@@ -122,7 +120,7 @@ const Twitter = () => {
         if (!selectedPost) return;
         setAnalyzing(true);
         try {
-            const meta = await aiService.analyzeTwitter(selectedPost.id);
+            const meta = await aiService.analyzeFacebook(selectedPost.id);
             setAiMeta(meta);
             toast({ title: "Analysis Complete", description: `Intent: ${meta.intent}, Sentiment: ${meta.sentiment}` });
         } catch (e: any) {
@@ -136,7 +134,7 @@ const Twitter = () => {
         if (!selectedPost) return;
         setGeneratingResponse(true);
         try {
-            const resp = await aiService.generateTwitterResponse(selectedPost.id);
+            const resp = await aiService.generateFacebookResponse(selectedPost.id);
             setResponseText(resp.content);
             toast({ title: "Reply Generated" });
         } catch (e: any) {
@@ -152,16 +150,16 @@ const Twitter = () => {
         setTimeout(() => setCopied(false), 2000);
     };
 
-    const handlePostToTwitter = async () => {
+    const handlePostToFacebook = async () => {
         if (!selectedPost || !responseText.trim()) return;
-        setPostingToTwitter(true);
+        setPostingToFacebook(true);
         try {
-            await twitterService.postComment(selectedPost.id, responseText);
-            toast({ title: "Posted to X", description: "Reply posted via browser" });
+            await facebookService.postComment(selectedPost.id, responseText);
+            toast({ title: "Posted to Facebook", description: "Comment posted via browser" });
         } catch (e: any) {
-            toast({ title: "Failed to Post", description: e.message || "Check your Twitter credentials in .env", variant: "destructive" });
+            toast({ title: "Failed to Post", description: e.message || "Check your Facebook credentials in .env", variant: "destructive" });
         } finally {
-            setPostingToTwitter(false);
+            setPostingToFacebook(false);
         }
     };
 
@@ -174,7 +172,7 @@ const Twitter = () => {
 
         const now = () => new Date().toLocaleTimeString();
 
-        const cleanup = twitterService.runAgentStream(
+        const cleanup = facebookService.runAgentStream(
             agentMaxPosts, agentDelay, false,
             (event: any) => {
                 if (event.type === "log" && event.emoji && event.message) {
@@ -187,7 +185,7 @@ const Twitter = () => {
                     setAgentPosts((prev) => prev.map((p) => p.id === event.post?.id ? { ...p, ...event.post, step: "done" } : p));
                 } else if (event.type === "result") {
                     setAgentResults(event.stats);
-                    toast({ title: "Agent Run Complete", description: `${event.stats?.threads_found || 0} tweets, ${event.stats?.comments_posted || 0} posted` });
+                    toast({ title: "Agent Run Complete", description: `${event.stats?.threads_found || 0} posts, ${event.stats?.comments_posted || 0} posted` });
                     fetchPosts();
                 } else if (event.type === "error") {
                     setAgentLogs((prev) => [...prev, { emoji: "❌", message: event.message || "Unknown error", time: now() }]);
@@ -201,7 +199,7 @@ const Twitter = () => {
     };
 
     const fetchPendingCount = async () => {
-        try { const data = await twitterService.getPendingCount(); setPendingCount(data.pending_count); } catch { /* ignore */ }
+        try { const data = await facebookService.getPendingCount(); setPendingCount(data.pending_count); } catch { /* ignore */ }
     };
 
     useEffect(() => { fetchPendingCount(); }, [posts]);
@@ -223,20 +221,20 @@ const Twitter = () => {
             {/* Header */}
             <div className="flex items-center justify-between mb-2">
                 <div>
-                    <h1 className="text-xl font-bold text-foreground">Twitter/X Monitoring</h1>
-                    <p className="text-xs text-muted-foreground">Find real estate discussions on X via Google · AI-powered analysis</p>
+                    <h1 className="text-xl font-bold text-foreground">Facebook Monitoring</h1>
+                    <p className="text-xs text-muted-foreground">Find real estate discussions on Facebook via Google · AI-powered analysis</p>
                 </div>
                 <div className="flex gap-2">
                     <Button onClick={handleMonitor} disabled={monitoring} className="bg-primary text-primary-foreground hover:bg-primary/90">
-                        {monitoring ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" />Scanning...</>) : (<><TrendingUp className="h-4 w-4 mr-2" />Scan Twitter</>)}
+                        {monitoring ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" />Scanning...</>) : (<><TrendingUp className="h-4 w-4 mr-2" />Scan Facebook</>)}
                     </Button>
                     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
                         <DialogTrigger asChild><Button variant="outline"><Eye className="h-4 w-4 mr-2" />Custom</Button></DialogTrigger>
                         <DialogContent>
-                            <DialogHeader><DialogTitle>Custom Twitter Search</DialogTitle></DialogHeader>
+                            <DialogHeader><DialogTitle>Custom Facebook Search</DialogTitle></DialogHeader>
                             <div className="space-y-4">
                                 <div><Label>Keywords (comma separated)</Label><Input value={customKeywords} onChange={(e) => setCustomKeywords(e.target.value)} placeholder="e.g., off market deals, real estate investing" /></div>
-                                <Button onClick={handleCustomMonitor} disabled={monitoring} className="w-full">{monitoring ? "Scanning..." : "Search Twitter"}</Button>
+                                <Button onClick={handleCustomMonitor} disabled={monitoring} className="w-full">{monitoring ? "Scanning..." : "Search Facebook"}</Button>
                             </div>
                         </DialogContent>
                     </Dialog>
@@ -245,9 +243,9 @@ const Twitter = () => {
                             <Button variant="outline" className="gap-2"><Bot className="h-4 w-4" />Agent{pendingCount > 0 && <span className="bg-primary text-primary-foreground text-[10px] px-1.5 py-0.5 rounded-full">{pendingCount}</span>}</Button>
                         </DialogTrigger>
                         <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-                            <DialogHeader><DialogTitle className="flex items-center gap-2"><Bot className="h-5 w-5" />Twitter Posting Agent</DialogTitle></DialogHeader>
+                            <DialogHeader><DialogTitle className="flex items-center gap-2"><Bot className="h-5 w-5" />Facebook Posting Agent</DialogTitle></DialogHeader>
                             <div className="space-y-4 overflow-y-auto flex-1 pr-1">
-                                <p className="text-sm text-muted-foreground">The agent will automatically generate AI replies and post them on tweets that haven't been processed yet.</p>
+                                <p className="text-sm text-muted-foreground">The agent will automatically generate AI replies and post them on Facebook posts that haven't been processed yet.</p>
                                 <div className="grid grid-cols-2 gap-3">
                                     <div><Label>Max Posts</Label><Input type="number" min={1} max={20} value={agentMaxPosts} onChange={(e) => setAgentMaxPosts(Number(e.target.value))} /></div>
                                     <div><Label>Delay (seconds)</Label><Input type="number" min={5} max={600} value={agentDelay} onChange={(e) => setAgentDelay(Number(e.target.value))} /></div>
@@ -266,7 +264,7 @@ const Twitter = () => {
                                 {agentPosts.length > 0 && (
                                     <div className="space-y-3">
                                         <div className="text-xs text-muted-foreground uppercase tracking-wider flex items-center justify-between">
-                                            <span>Processed Tweets ({agentPosts.length})</span>
+                                            <span>Processed Posts ({agentPosts.length})</span>
                                             {agentResults && <span className="normal-case tracking-normal">{agentResults.responses_generated} generated · {agentResults.comments_posted} posted · {agentResults.errors?.length || 0} errors</span>}
                                         </div>
                                         {agentPosts.map((post, i) => {
@@ -278,7 +276,7 @@ const Twitter = () => {
                                                 <div key={i} className={`rounded-lg border p-3 ${statusColor} transition-all`}>
                                                     <div className="flex items-start justify-between gap-2 cursor-pointer" onClick={() => setExpandedPost(isExpanded ? null : i)}>
                                                         <div className="flex-1 min-w-0">
-                                                            <div className="flex items-center gap-2 mb-1"><span className="text-[10px] text-muted-foreground">{post.author || "X"}</span></div>
+                                                            <div className="flex items-center gap-2 mb-1"><span className="text-[10px] text-muted-foreground">{post.author || "Facebook"}</span></div>
                                                             <p className="text-sm font-medium text-foreground leading-tight">{post.title}</p>
                                                         </div>
                                                         <div className="flex items-center gap-2 shrink-0">
@@ -289,11 +287,11 @@ const Twitter = () => {
                                                     </div>
                                                     {isExpanded && (
                                                         <div className="mt-3 space-y-3 border-t border-border/50 pt-3">
-                                                            {post.content_preview && <div><div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Original Tweet</div><p className="text-xs text-foreground/70 leading-relaxed bg-background/50 rounded p-2">{post.content_preview}...</p></div>}
+                                                            {post.content_preview && <div><div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Original Post</div><p className="text-xs text-foreground/70 leading-relaxed bg-background/50 rounded p-2">{post.content_preview}...</p></div>}
                                                             {post.response_content && <div><div className="flex items-center justify-between mb-1"><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Generated Reply ({post.response_content.length} chars)</span><Button variant="ghost" size="sm" className="h-5 px-1.5 text-[10px]" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(post.response_content); toast({ title: "Copied!" }); }}><Copy className="h-2.5 w-2.5 mr-1" />Copy</Button></div><div className="text-xs text-foreground leading-relaxed bg-background/50 rounded p-2 max-h-[200px] overflow-y-auto whitespace-pre-wrap">{post.response_content}</div></div>}
                                                             {post.comment_url && <div className="flex items-center gap-2"><Check className="h-3 w-3 text-green-400" /><a href={post.comment_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline truncate">{post.comment_url}</a></div>}
                                                             {post.error && <div className="flex items-start gap-2 bg-red-500/10 rounded p-2"><X className="h-3 w-3 text-red-400 shrink-0 mt-0.5" /><p className="text-xs text-red-400">{post.error}</p></div>}
-                                                            {post.url && <a href={post.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"><ArrowUpRight className="h-3 w-3" />View on X</a>}
+                                                            {post.url && <a href={post.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"><ArrowUpRight className="h-3 w-3" />View on Facebook</a>}
                                                         </div>
                                                     )}
                                                 </div>
@@ -308,15 +306,15 @@ const Twitter = () => {
             </div>
 
             {/* Stats */}
-            <CredentialsBanner platform="twitter" label="Twitter / X" />
+            <CredentialsBanner platform="facebook" label="Facebook" />
             <div className="flex items-center gap-4 text-xs text-muted-foreground mb-2"><span>All ({posts.length})</span></div>
 
             {/* Main Content */}
             {posts.length === 0 ? (
                 <div className="bg-card rounded-xl border border-border p-12 text-center">
-                    <TwitterIcon className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-muted-foreground mb-4">No tweets found yet.</p>
-                    <p className="text-sm text-muted-foreground">Click "Scan Twitter" to search Google for tweets about real estate.</p>
+                    <FacebookIcon className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground mb-4">No Facebook posts found yet.</p>
+                    <p className="text-sm text-muted-foreground">Click "Scan Facebook" to search Google for Facebook posts about real estate.</p>
                 </div>
             ) : (
                 <div className="flex border border-border rounded-xl overflow-hidden bg-card w-full" style={{ height: "calc(100vh - 180px)" }}>
@@ -326,7 +324,7 @@ const Twitter = () => {
                             {paginatedPosts.map((post) => (
                                 <div key={post.id} onClick={() => handleSelectPost(post)} className={`p-3 cursor-pointer border-b border-border transition-colors hover:bg-muted/50 ${selectedPost?.id === post.id ? "bg-primary/10 border-l-2 border-l-primary" : ""}`}>
                                     <div className="flex items-center justify-between mb-1">
-                                        <span className="text-xs text-muted-foreground">{post.author || "X"}</span>
+                                        <span className="text-xs text-muted-foreground">{post.author || "Facebook"}</span>
                                         <span className="text-xs text-muted-foreground">{formatDate(post.created_at)}</span>
                                     </div>
                                     <p className="text-sm font-semibold text-foreground line-clamp-2 mb-1">{post.title}</p>
@@ -358,7 +356,7 @@ const Twitter = () => {
                                         <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
                                             {selectedPost.author && <span>{selectedPost.author}</span>}
                                             {selectedPost.author && <span>·</span>}
-                                            <span>X</span><span>·</span><span>Saved {formatDate(selectedPost.created_at)}</span>
+                                            <span>Facebook</span><span>·</span><span>Saved {formatDate(selectedPost.created_at)}</span>
                                         </div>
                                     </div>
                                     <Button variant="ghost" size="sm" onClick={() => { setSelectedPost(null); setResponseText(""); setAiMeta(null); }}><X className="h-4 w-4" /></Button>
@@ -370,7 +368,7 @@ const Twitter = () => {
                                     <Button size="sm" variant="outline" onClick={handleGenerateResponse} disabled={generatingResponse}>
                                         {generatingResponse ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Sparkles className="h-3 w-3 mr-1" />}Generate Reply
                                     </Button>
-                                    <Button variant="outline" size="sm" className="ml-auto" onClick={() => window.open(selectedPost.url, '_blank')}><ArrowUpRight className="h-3 w-3 mr-1" />Open on X</Button>
+                                    <Button variant="outline" size="sm" className="ml-auto" onClick={() => window.open(selectedPost.url, '_blank')}><ArrowUpRight className="h-3 w-3 mr-1" />Open on Facebook</Button>
                                 </div>
                             </div>
 
@@ -397,7 +395,7 @@ const Twitter = () => {
                                     </div>
                                 )}
 
-                                <div className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{selectedPost.content || selectedPost.snippet || "No content available. Click 'Open on X' to view."}</div>
+                                <div className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{selectedPost.content || selectedPost.snippet || "No content available. Click 'Open on Facebook' to view."}</div>
                                 <div className="text-xs text-muted-foreground break-all">{selectedPost.url}</div>
                             </div>
 
@@ -406,18 +404,17 @@ const Twitter = () => {
                                     <h3 className="text-xs font-semibold text-foreground flex items-center gap-1.5"><Sparkles className="h-3 w-3 text-primary" />Reply</h3>
                                     <div className="flex items-center gap-1">
                                         <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={handleCopy}>{copied ? <Check className="h-3 w-3 text-green-400" /> : <Copy className="h-3 w-3" />}</Button>
-                                        <Button size="sm" variant="default" className="h-7 text-xs gap-1" disabled={postingToTwitter || !responseText.trim()} onClick={handlePostToTwitter}>
-                                            {postingToTwitter ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}Post to X
+                                        <Button size="sm" variant="default" className="h-7 text-xs gap-1" disabled={postingToFacebook || !responseText.trim()} onClick={handlePostToFacebook}>
+                                            {postingToFacebook ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}Post to Facebook
                                         </Button>
                                     </div>
                                 </div>
                                 <textarea className="w-full min-h-[120px] max-h-[30vh] bg-background border border-border rounded-lg p-3 text-sm text-foreground leading-relaxed resize-y focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground" placeholder="Write your reply or click 'Generate Reply'..." value={responseText} onChange={(e) => setResponseText(e.target.value)} />
-                                {responseText.length > 0 && <p className={`text-xs ${responseText.length > 280 ? "text-red-400" : "text-muted-foreground"}`}>{responseText.length}/280</p>}
                             </div>
                         </div>
                     ) : (
                         <div className="hidden md:flex flex-1 items-center justify-center text-muted-foreground bg-card">
-                            <div className="text-center"><TwitterIcon className="h-10 w-10 mx-auto mb-3 opacity-30" /><p className="text-sm">Select a tweet to view details</p></div>
+                            <div className="text-center"><FacebookIcon className="h-10 w-10 mx-auto mb-3 opacity-30" /><p className="text-sm">Select a post to view details</p></div>
                         </div>
                     )}
                 </div>
@@ -426,4 +423,4 @@ const Twitter = () => {
     );
 };
 
-export default Twitter;
+export default Facebook;

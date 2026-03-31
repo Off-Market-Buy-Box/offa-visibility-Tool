@@ -35,20 +35,28 @@ class RedditAgent:
     def _has_browser_credentials(self) -> bool:
         return all([settings.REDDIT_USERNAME, settings.REDDIT_PASSWORD])
 
-    async def _get_poster(self):
+    async def _get_poster(self, db=None):
+        from app.core.credentials import get_platform_credentials
+        if db:
+            creds = await get_platform_credentials("reddit", db)
+            username = creds.get("username", "")
+            password = creds.get("password", "")
+        else:
+            username = settings.REDDIT_USERNAME
+            password = settings.REDDIT_PASSWORD
+
         if self.mode == "api" or (self.mode == "auto" and self._has_api_credentials()):
             from app.services.reddit_poster import RedditPoster
             return RedditPoster(), "api"
 
-        if self.mode == "browser" or (self.mode == "auto" and self._has_browser_credentials()):
+        if self.mode == "browser" or (self.mode == "auto" and username and password):
             if self._browser_poster is None:
                 from app.services.reddit_poster_browser import RedditPosterBrowser
-                self._browser_poster = RedditPosterBrowser()
+                self._browser_poster = RedditPosterBrowser(username=username, password=password)
             return self._browser_poster, "browser"
 
         raise ValueError(
-            "No Reddit credentials configured. Set REDDIT_USERNAME + REDDIT_PASSWORD in .env "
-            "(for browser mode) or add REDDIT_CLIENT_ID + REDDIT_CLIENT_SECRET (for API mode)."
+            "No Reddit credentials configured. Set them in Profile."
         )
 
     async def run(
@@ -70,7 +78,7 @@ class RedditAgent:
 
         if not dry_run:
             await emit({"type": "log", "emoji": "🔧", "message": "Checking credentials..."})
-            poster, actual_mode = await self._get_poster()
+            poster, actual_mode = await self._get_poster(db)
             stats["mode"] = actual_mode
             await emit({"type": "log", "emoji": "🤖", "message": f"Using {actual_mode} mode for posting"})
         else:

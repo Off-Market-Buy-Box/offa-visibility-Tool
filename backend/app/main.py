@@ -13,6 +13,9 @@ from app.models.smart_task import SmartTask  # noqa
 from app.models.ai_metadata import AIMetadata  # noqa
 from app.models.generated_response import GeneratedResponse  # noqa
 from app.models.linkedin_post import LinkedInPost  # noqa
+from app.models.twitter_post import TwitterPost  # noqa
+from app.models.facebook_post import FacebookPost  # noqa
+from app.models.platform_credential import PlatformCredential  # noqa
 
 app = FastAPI(
     title=settings.PROJECT_NAME,

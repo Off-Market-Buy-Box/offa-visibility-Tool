@@ -7,6 +7,7 @@ from app.core.config import settings
 from app.models.reddit_mention import RedditMention
 from app.models.linkedin_post import LinkedInPost
 from app.models.twitter_post import TwitterPost
+from app.models.facebook_post import FacebookPost
 from app.models.ai_metadata import AIMetadata
 from app.models.generated_response import GeneratedResponse
 
@@ -574,6 +575,139 @@ Tweet by {post.author or 'someone'}:
         result = await db.execute(
             select(GeneratedResponse)
             .where(GeneratedResponse.twitter_post_id == post_id)
+            .order_by(GeneratedResponse.created_at.desc())
+        )
+        return result.scalars().all()
+
+    # ---- Facebook AI methods ----
+
+    async def analyze_facebook_post(self, db: AsyncSession, post_id: int) -> AIMetadata:
+        """Analyze a Facebook post and extract structured metadata"""
+        result = await db.execute(
+            select(FacebookPost).where(FacebookPost.id == post_id)
+        )
+        post = result.scalar_one_or_none()
+        if not post:
+            raise ValueError(f"Facebook post {post_id} not found")
+
+        existing = await db.execute(
+            select(AIMetadata).where(AIMetadata.facebook_post_id == post_id)
+        )
+        existing_meta = existing.scalar_one_or_none()
+        if existing_meta:
+            return existing_meta
+
+        text = post.content or post.snippet or ""
+        if len(text) > 4000:
+            text = text[:4000] + "..."
+
+        prompt = f"""Analyze this Facebook post and return a JSON object with the following fields:
+- intent: one of "question", "discussion", "insight", "problem", "opportunity"
+- main_topic: a short phrase describing the main topic
+- summary: 1-2 sentence summary
+- pain_points: array of pain points mentioned (max 5)
+- opportunities: array of business/engagement opportunities (max 5)
+- keywords: array of relevant keywords (max 8)
+- sentiment: one of "positive", "negative", "neutral", "mixed"
+
+Post by: {post.author or 'Unknown'}
+Content: {text}
+
+Return ONLY valid JSON, no markdown formatting."""
+
+        raw = await self._call_openai(
+            [{"role": "user", "content": prompt}],
+            temperature=0.3,
+        )
+
+        try:
+            cleaned = raw.strip()
+            if cleaned.startswith("```"):
+                cleaned = cleaned.split("\n", 1)[1]
+                cleaned = cleaned.rsplit("```", 1)[0]
+            parsed = json.loads(cleaned)
+        except json.JSONDecodeError:
+            parsed = {
+                "intent": "discussion", "main_topic": "unknown",
+                "summary": raw[:200], "pain_points": [],
+                "opportunities": [], "keywords": [], "sentiment": "neutral",
+            }
+
+        metadata = AIMetadata(
+            facebook_post_id=post_id,
+            intent=parsed.get("intent", "discussion"),
+            main_topic=parsed.get("main_topic", ""),
+            summary=parsed.get("summary", ""),
+            pain_points=parsed.get("pain_points", []),
+            opportunities=parsed.get("opportunities", []),
+            keywords=parsed.get("keywords", []),
+            sentiment=parsed.get("sentiment", "neutral"),
+        )
+        db.add(metadata)
+        await db.commit()
+        await db.refresh(metadata)
+        return metadata
+
+    async def generate_facebook_response(self, db: AsyncSession, post_id: int) -> GeneratedResponse:
+        """Generate a comment for a Facebook post"""
+        result = await db.execute(
+            select(FacebookPost).where(FacebookPost.id == post_id)
+        )
+        post = result.scalar_one_or_none()
+        if not post:
+            raise ValueError(f"Facebook post {post_id} not found")
+
+        meta_result = await db.execute(
+            select(AIMetadata).where(AIMetadata.facebook_post_id == post_id)
+        )
+        metadata = meta_result.scalar_one_or_none()
+
+        context = ""
+        if metadata:
+            context = f"\nAI Analysis - Intent: {metadata.intent}, Topic: {metadata.main_topic}, Sentiment: {metadata.sentiment}"
+
+        text = post.content or post.snippet or ""
+
+        prompt = f"""Write a Facebook comment reply to this post. 2-3 sentences.
+
+KNOW THIS (use only if relevant): Offa = off-market real estate app, like Tinder for wholesale deals. Free, AI matching, 100% financing.
+
+Rules:
+- 2-3 sentences, conversational and friendly
+- Sound like a real person on Facebook
+- Mention Offa naturally in ONE sentence max — keep it casual
+- Give actual value first, Offa mention is secondary
+- No links, no hashtags, no "check out", no sales language
+- Friendly Facebook energy
+
+Post by {post.author or 'someone'}:
+{text}{context}"""
+
+        content = await self._call_openai(
+            [{"role": "user", "content": prompt}],
+            temperature=0.7,
+        )
+
+        gen_response = GeneratedResponse(
+            facebook_post_id=post_id,
+            response_type="comment",
+            content=content.strip(),
+        )
+        db.add(gen_response)
+        await db.commit()
+        await db.refresh(gen_response)
+        return gen_response
+
+    async def get_facebook_metadata(self, db: AsyncSession, post_id: int) -> Optional[AIMetadata]:
+        result = await db.execute(
+            select(AIMetadata).where(AIMetadata.facebook_post_id == post_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_facebook_responses(self, db: AsyncSession, post_id: int) -> List[GeneratedResponse]:
+        result = await db.execute(
+            select(GeneratedResponse)
+            .where(GeneratedResponse.facebook_post_id == post_id)
             .order_by(GeneratedResponse.created_at.desc())
         )
         return result.scalars().all()

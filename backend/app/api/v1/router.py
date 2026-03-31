@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import keywords, rankings, competitors, reddit, smart_tasks, ai, linkedin, twitter
+from app.api.v1.endpoints import keywords, rankings, competitors, reddit, smart_tasks, ai, linkedin, twitter, facebook, credentials
 
 api_router = APIRouter()
 
@@ -11,3 +11,5 @@ api_router.include_router(smart_tasks.router, prefix="/smart-tasks", tags=["smar
 api_router.include_router(ai.router, prefix="/ai", tags=["ai"])
 api_router.include_router(linkedin.router, prefix="/linkedin", tags=["linkedin"])
 api_router.include_router(twitter.router, prefix="/twitter", tags=["twitter"])
+api_router.include_router(facebook.router, prefix="/facebook", tags=["facebook"])
+api_router.include_router(credentials.router, prefix="/credentials", tags=["credentials"])

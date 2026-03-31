@@ -8,9 +8,11 @@ from app.schemas.ai import (
     AnalyzeRequest,
     AnalyzeLinkedInRequest,
     AnalyzeTwitterRequest,
+    AnalyzeFacebookRequest,
     GenerateResponseRequest,
     GenerateLinkedInResponseRequest,
     GenerateTwitterResponseRequest,
+    GenerateFacebookResponseRequest,
     GenerateBlogRequest,
 )
 from app.services.ai_service import AIService
@@ -158,3 +160,44 @@ async def generate_twitter_response(req: GenerateTwitterResponseRequest, db: Asy
 async def get_twitter_responses(post_id: int, db: AsyncSession = Depends(get_db)):
     service = AIService()
     return await service.get_twitter_responses(db, post_id)
+
+
+# ---- Facebook AI endpoints ----
+
+@router.post("/facebook/analyze", response_model=AIMetadataResponse)
+async def analyze_facebook_post(req: AnalyzeFacebookRequest, db: AsyncSession = Depends(get_db)):
+    try:
+        service = AIService()
+        metadata = await service.analyze_facebook_post(db, req.post_id)
+        return metadata
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI analysis failed: {str(e)}")
+
+
+@router.get("/facebook/metadata/{post_id}", response_model=AIMetadataResponse)
+async def get_facebook_metadata(post_id: int, db: AsyncSession = Depends(get_db)):
+    service = AIService()
+    metadata = await service.get_facebook_metadata(db, post_id)
+    if not metadata:
+        raise HTTPException(status_code=404, detail="No AI analysis found")
+    return metadata
+
+
+@router.post("/facebook/generate-response", response_model=GeneratedResponseOut)
+async def generate_facebook_response(req: GenerateFacebookResponseRequest, db: AsyncSession = Depends(get_db)):
+    try:
+        service = AIService()
+        response = await service.generate_facebook_response(db, req.post_id)
+        return response
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Response generation failed: {str(e)}")
+
+
+@router.get("/facebook/responses/{post_id}", response_model=List[GeneratedResponseOut])
+async def get_facebook_responses(post_id: int, db: AsyncSession = Depends(get_db)):
+    service = AIService()
+    return await service.get_facebook_responses(db, post_id)

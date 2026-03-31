@@ -1,16 +1,15 @@
-import { BarChart3, Search, TrendingUp, Zap, Settings } from "lucide-react";
+import { Search, KeyRound } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import RedditIcon from "@/components/icons/RedditIcon";
 import LinkedInIcon from "@/components/icons/LinkedInIcon";
 import TwitterIcon from "@/components/icons/TwitterIcon";
+import FacebookIcon from "@/components/icons/FacebookIcon";
 
 const navSections = [
   {
     label: "AI VISIBILITY",
     items: [
-      { title: "Analytics", icon: BarChart3, url: "/", color: "" },
       { title: "Keywords", icon: Search, url: "/keywords", color: "" },
-      { title: "Competitors", icon: TrendingUp, url: "/competitors", color: "" },
     ],
   },
   {
@@ -19,31 +18,26 @@ const navSections = [
       { title: "Reddit", icon: RedditIcon, url: "/reddit", color: "" },
       { title: "LinkedIn", icon: LinkedInIcon, url: "/linkedin", color: "" },
       { title: "Twitter", icon: TwitterIcon, url: "/twitter", color: "" },
-    ],
-  },
-  {
-    label: "CONTENT & TOOLS",
-    items: [
-      { title: "Smart Tasks", icon: Zap, url: "/smart-tasks", color: "" },
+      { title: "Facebook", icon: FacebookIcon, url: "/facebook", color: "" },
     ],
   },
   {
     label: "ACCOUNT",
     items: [
-      { title: "Settings", icon: Settings, url: "/settings", color: "" },
+      { title: "Profile", icon: KeyRound, url: "/profile", color: "" },
     ],
   },
 ];
 
 const DashboardSidebar = () => {
   return (
-    <aside className="w-56 min-h-screen bg-sidebar flex flex-col shrink-0">
+    <aside className="w-56 h-screen bg-sidebar flex flex-col shrink-0 sticky top-0">
       <div className="px-5 py-6">
-        <h1 className="text-2xl font-bold text-sidebar-foreground">Offa</h1>
+        <h1 className="text-2xl font-bold text-sidebar-foreground">Offa Flow</h1>
         <p className="text-xs text-sidebar-foreground/70">Visibility Tool</p>
       </div>
 
-      <nav className="flex-1 px-3 space-y-6">
+      <nav className="flex-1 px-3 space-y-6 overflow-y-auto">
         {navSections.map((section) => (
           <div key={section.label}>
             <p className="px-3 mb-2 text-[11px] font-semibold tracking-wider text-sidebar-foreground/60">
