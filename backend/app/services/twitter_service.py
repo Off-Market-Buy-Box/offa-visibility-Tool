@@ -49,7 +49,16 @@ class TwitterService:
                     title = item.get("title", "")
                     snippet = item.get("snippet", "")
 
-                    # Extract author from URL or title
+                    # Only keep actual post URLs (must contain /status/)
+                    # This filters out profile pages like twitter.com/username
+                    is_post = bool(
+                        re.search(r"twitter\.com/[^/]+/status/\d+", url)
+                        or re.search(r"x\.com/[^/]+/status/\d+", url)
+                    )
+                    if not is_post:
+                        continue
+
+                    # Extract author from URL
                     author = None
                     for pattern in [
                         r"twitter\.com/([^/]+)/status",

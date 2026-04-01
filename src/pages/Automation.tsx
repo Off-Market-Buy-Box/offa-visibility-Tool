@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Play, Square, Loader2, RefreshCw, MessageSquare, Search, ArrowUpRight, ExternalLink } from "lucide-react";
+import { Play, Square, Loader2, RefreshCw, MessageSquare, Search, ExternalLink, Trash2 } from "lucide-react";
 import RedditIcon from "@/components/icons/RedditIcon";
 import LinkedInIcon from "@/components/icons/LinkedInIcon";
 import TwitterIcon from "@/components/icons/TwitterIcon";
@@ -27,6 +27,7 @@ const Automation = () => {
     const [toggling, setToggling] = useState(false);
     const [tab, setTab] = useState<Tab>("activity");
     const [filterPlatform, setFilterPlatform] = useState<string>("all");
+    const [clearing, setClearing] = useState(false);
     const { toast } = useToast();
     const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -67,6 +68,17 @@ const Automation = () => {
 
     const handleSettingChange = async (key: string, value: number) => {
         try { await automationService.updateSettings({ [key]: value } as any); await fetchAll(); } catch { /* */ }
+    };
+
+    const handleClearAll = async () => {
+        if (!confirm("Are you sure? This will delete ALL scanned posts, comments, logs, and stats across every platform.")) return;
+        setClearing(true);
+        try {
+            await automationService.clearAll();
+            toast({ title: "All data cleared" });
+            await fetchAll();
+        } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
+        finally { setClearing(false); }
     };
 
     const formatTime = (iso: string | null) => {
@@ -142,6 +154,13 @@ const Automation = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div><Label className="text-xs text-muted-foreground">Posts per run</Label><Input type="number" min={1} max={50} value={status.max_posts_per_run} onChange={(e) => handleSettingChange("max_posts_per_run", Number(e.target.value))} className="mt-1 h-8" /></div>
                     <div><Label className="text-xs text-muted-foreground">Delay between cycles (sec)</Label><Input type="number" min={5} max={3600} value={status.delay_between_cycles} onChange={(e) => handleSettingChange("delay_between_cycles", Number(e.target.value))} className="mt-1 h-8" /></div>
+                </div>
+                <div className="mt-3 pt-3 border-t border-border">
+                    <Button variant="destructive" size="sm" onClick={handleClearAll} disabled={clearing || status.running} className="gap-2 text-xs">
+                        {clearing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                        Clear All Data
+                    </Button>
+                    <p className="text-[10px] text-muted-foreground mt-1">Deletes all scanned posts, comments, logs, and stats.</p>
                 </div>
             </div>
 

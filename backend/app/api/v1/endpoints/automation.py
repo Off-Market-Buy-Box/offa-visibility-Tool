@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc
+from sqlalchemy import select, func, desc, delete
 from typing import Optional
 from pydantic import BaseModel, Field
 from app.core.database import get_db
@@ -157,3 +157,33 @@ async def get_commented_posts(
 
     results.sort(key=lambda x: x.get("posted_at") or "", reverse=True)
     return results[:limit]
+
+
+@router.post("/clear-all")
+async def clear_all_data(db: AsyncSession = Depends(get_db)):
+    """Delete all scanned posts, comments, logs, AI metadata — everything"""
+    from app.models.reddit_mention import RedditMention
+    from app.models.linkedin_post import LinkedInPost
+    from app.models.twitter_post import TwitterPost
+    from app.models.facebook_post import FacebookPost
+    from app.models.generated_response import GeneratedResponse
+    from app.models.ai_metadata import AIMetadata
+
+    for model in [GeneratedResponse, AIMetadata, AutomationLog, RedditMention, LinkedInPost, TwitterPost, FacebookPost]:
+        await db.execute(delete(model))
+
+    await db.commit()
+
+    # Reset in-memory counters
+    for p in ["reddit", "linkedin", "twitter", "facebook"]:
+        automation._status["platforms"][p].update({
+            "last_scan": None,
+            "last_comment": None,
+            "total_commented": 0,
+            "total_scanned": 0,
+            "errors": 0,
+        })
+    automation._status["cycle_count"] = 0
+    automation._status["last_cycle_at"] = None
+
+    return {"message": "All data cleared"}

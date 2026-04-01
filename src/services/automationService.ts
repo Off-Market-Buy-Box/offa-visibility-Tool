@@ -58,4 +58,5 @@ export const automationService = {
         if (platform) params.set('platform', platform);
         return api.get<CommentedPost[]>(`/automation/commented-posts?${params}`);
     },
+    clearAll: () => api.post<{ message: string }>('/automation/clear-all', {}),
 };
