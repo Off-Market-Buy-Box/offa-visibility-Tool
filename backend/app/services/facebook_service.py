@@ -23,12 +23,18 @@ class FacebookService:
             "pocket listing",
             "real estate investing",
             "off market properties",
+            "motivated seller real estate",
+            "distressed property deals",
+            "investment property for sale",
+            "fix and flip opportunity",
+            "real estate wholesale deal",
+            "below market value property",
         ]
 
-    async def search_facebook(self, query: str, num: int = 20) -> List[Dict]:
+    async def search_facebook(self, query: str, num: int = 50) -> List[Dict]:
         """Search Google for Facebook posts matching a query"""
         results = []
-        full_query = f'site:facebook.com "{query}"'
+        full_query = f'site:facebook.com/*/posts OR site:facebook.com/groups/*/permalink "{query}"'
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             try:
@@ -48,6 +54,17 @@ class FacebookService:
                     url = item.get("link", "")
                     title = item.get("title", "")
                     snippet = item.get("snippet", "")
+
+                    # Only keep actual post URLs, not profiles/groups/marketplace/pages
+                    is_post = bool(
+                        re.search(r"facebook\.com/.+/posts/", url)
+                        or re.search(r"facebook\.com/permalink\.php", url)
+                        or re.search(r"facebook\.com/story\.php", url)
+                        or re.search(r"facebook\.com/.+/videos/", url)
+                        or re.search(r"facebook\.com/groups/.+/permalink/", url)
+                    )
+                    if not is_post:
+                        continue
 
                     # Extract author from title
                     author = None

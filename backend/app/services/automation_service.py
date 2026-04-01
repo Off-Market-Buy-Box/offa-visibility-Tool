@@ -100,9 +100,15 @@ class AutomationService:
                 has_pending = await self._has_pending_posts(platform)
                 if not has_pending:
                     self._status["current_action"] = "scanning"
-                    await self._scan(platform)
+                    scan_result = await self._scan(platform)
                     if not self._running:
                         break
+
+                    # Re-check after scan — if still no pending posts, skip commenting
+                    # This prevents the loop from endlessly scanning the same results
+                    has_pending = await self._has_pending_posts(platform)
+                    if not has_pending:
+                        continue
 
                 # Comment on pending posts
                 self._status["current_action"] = "commenting"
@@ -120,8 +126,9 @@ class AutomationService:
                 self._status["current_action"] = "short pause before next cycle"
                 await self._sleep(30)
             else:
+                # No work across any platform — wait longer to avoid hammering APIs
                 self._status["current_action"] = "waiting between cycles"
-                await self._sleep(self._status["delay_between_cycles"])
+                await self._sleep(max(self._status["delay_between_cycles"], 60))
 
         self._status["current_action"] = None
 
@@ -140,30 +147,35 @@ class AutomationService:
                     svc = RedditService()
                     stats = await svc.monitor_real_estate_mentions(db)
                     found = stats.get("total_mentions_found", 0)
+                    new_saved = stats.get("new_mentions_saved", found)
                 elif platform == "linkedin":
                     from app.services.linkedin_service import LinkedInService
                     svc = LinkedInService()
                     stats = await svc.monitor_linkedin(db)
                     found = stats.get("total_found", 0)
+                    new_saved = stats.get("new_saved", found)
                 elif platform == "twitter":
                     from app.services.twitter_service import TwitterService
                     svc = TwitterService()
                     stats = await svc.monitor_twitter(db)
                     found = stats.get("total_found", 0)
+                    new_saved = stats.get("new_saved", found)
                 elif platform == "facebook":
                     from app.services.facebook_service import FacebookService
                     svc = FacebookService()
                     stats = await svc.monitor_facebook(db)
                     found = stats.get("total_found", 0)
+                    new_saved = stats.get("new_saved", found)
                 else:
                     return {}
 
                 self._status["platforms"][platform]["last_scan"] = datetime.utcnow().isoformat()
-                self._status["platforms"][platform]["total_scanned"] += found
+                # Only count genuinely new posts, not duplicates
+                self._status["platforms"][platform]["total_scanned"] += new_saved
 
                 log = AutomationLog(
                     platform=platform, action="scan",
-                    posts_found=found, posts_commented=0, errors=0,
+                    posts_found=new_saved, posts_commented=0, errors=0,
                     details=stats,
                 )
                 db.add(log)

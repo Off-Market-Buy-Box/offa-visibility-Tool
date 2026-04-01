@@ -23,12 +23,18 @@ class LinkedInService:
             "pocket listing",
             "real estate investing",
             "off market properties",
+            "motivated seller real estate",
+            "distressed property deals",
+            "investment property for sale",
+            "fix and flip opportunity",
+            "real estate wholesale deal",
+            "below market value property",
         ]
 
-    async def search_linkedin(self, query: str, num: int = 20) -> List[Dict]:
+    async def search_linkedin(self, query: str, num: int = 50) -> List[Dict]:
         """Search Google for LinkedIn posts matching a query"""
         results = []
-        full_query = f'site:linkedin.com/posts OR site:linkedin.com/pulse "{query}"'
+        full_query = f'site:linkedin.com/posts OR site:linkedin.com/pulse OR site:linkedin.com/feed/update "{query}"'
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             try:
@@ -48,6 +54,15 @@ class LinkedInService:
                     url = item.get("link", "")
                     title = item.get("title", "")
                     snippet = item.get("snippet", "")
+
+                    # Only keep actual post/article URLs, not profiles or company pages
+                    is_post = bool(
+                        re.search(r"linkedin\.com/posts/", url)
+                        or re.search(r"linkedin\.com/pulse/", url)
+                        or re.search(r"linkedin\.com/feed/update/", url)
+                    )
+                    if not is_post:
+                        continue
 
                     # Extract author from title (LinkedIn format: "Author Name on LinkedIn: ...")
                     author = None

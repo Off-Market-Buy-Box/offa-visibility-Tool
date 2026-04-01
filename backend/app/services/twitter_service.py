@@ -23,12 +23,18 @@ class TwitterService:
             "pocket listing",
             "real estate investing",
             "off market properties",
+            "motivated seller real estate",
+            "distressed property deals",
+            "investment property for sale",
+            "fix and flip opportunity",
+            "real estate wholesale deal",
+            "below market value property",
         ]
 
-    async def search_twitter(self, query: str, num: int = 20) -> List[Dict]:
+    async def search_twitter(self, query: str, num: int = 50) -> List[Dict]:
         """Search Google for Twitter/X posts matching a query"""
         results = []
-        full_query = f'site:twitter.com OR site:x.com "{query}"'
+        full_query = f'site:twitter.com/*/status OR site:x.com/*/status "{query}"'
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             try:
