@@ -75,7 +75,7 @@ def launch_browser(pw):
 
 
 def do_login_only(pw, email, password):
-    """Open browser, go to LinkedIn, let user log in manually. Wait up to 3 min."""
+    """Open browser, go to LinkedIn login. User logs in manually. Browser stays open until user closes it."""
     print("STEP:launching_browser", flush=True)
     browser = launch_browser(pw)
     page = browser.new_page()
@@ -83,40 +83,48 @@ def do_login_only(pw, email, password):
         "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });"
     )
 
-    try:
-        print("STEP:checking_session", flush=True)
-        page.goto("https://www.linkedin.com/feed/", wait_until="domcontentloaded")
-        page.wait_for_timeout(3000)
+    print("STEP:checking_session", flush=True)
+    page.goto("https://www.linkedin.com/feed/", wait_until="domcontentloaded")
+    page.wait_for_timeout(3000)
 
-        if is_logged_in(page):
-            print("STEP:already_logged_in", flush=True)
-            print(json.dumps({
-                "logged_in": True, "method": "browser",
-                "message": "Already logged in to LinkedIn!"
-            }))
-            return
-
-        print("STEP:opening_login_page", flush=True)
-        page.goto("https://www.linkedin.com/login", wait_until="domcontentloaded")
-        page.wait_for_timeout(2000)
-
-        print("STEP:waiting_for_manual_login", flush=True)
-        success = wait_for_login(page, timeout_seconds=180)
-
-        if success:
-            print("STEP:login_successful", flush=True)
-            page.wait_for_timeout(2000)
-            print(json.dumps({
-                "logged_in": True, "method": "browser",
-                "message": "LinkedIn login successful! Session saved."
-            }))
-        else:
-            print(json.dumps({"error": "Login timed out after 3 minutes."}))
-            sys.exit(1)
-
-    finally:
-        page.close()
+    if is_logged_in(page):
+        print("STEP:already_logged_in", flush=True)
+        print(json.dumps({
+            "logged_in": True, "method": "browser",
+            "message": "Already logged in to LinkedIn!"
+        }))
+        try:
+            page.wait_for_event("close", timeout=0)
+        except Exception:
+            pass
         browser.close()
+        return
+
+    print("STEP:opening_login_page", flush=True)
+    page.goto("https://www.linkedin.com/login", wait_until="domcontentloaded")
+    page.wait_for_timeout(2000)
+
+    print("STEP:waiting_for_manual_login", flush=True)
+    success = wait_for_login(page, timeout_seconds=600)
+
+    if success:
+        print("STEP:login_successful", flush=True)
+        page.wait_for_timeout(2000)
+        print(json.dumps({
+            "logged_in": True, "method": "browser",
+            "message": "LinkedIn login successful! Session saved."
+        }))
+    else:
+        print(json.dumps({
+            "logged_in": False, "method": "browser",
+            "message": "Login not detected yet. Close the browser when done."
+        }))
+
+    try:
+        page.wait_for_event("close", timeout=0)
+    except Exception:
+        pass
+    browser.close()
 
 
 def _find_comment_box(page):

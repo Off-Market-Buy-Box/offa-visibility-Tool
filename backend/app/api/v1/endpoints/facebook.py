@@ -144,7 +144,7 @@ async def browser_login(db: AsyncSession = Depends(get_db)):
             [sys.executable, _SCRIPT_PATH, args_json],
             stdout=sp.PIPE, stderr=sp.PIPE,
         )
-        stdout, stderr = proc.communicate(timeout=300)
+        stdout, stderr = proc.communicate(timeout=900)
         return proc.returncode, stdout.decode("utf-8", errors="replace"), stderr.decode("utf-8", errors="replace")
 
     try:

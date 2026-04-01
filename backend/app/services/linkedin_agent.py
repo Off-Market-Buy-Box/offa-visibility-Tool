@@ -35,14 +35,9 @@ class LinkedInAgent:
         else:
             email = settings.LINKEDIN_EMAIL
             password = settings.LINKEDIN_PASSWORD
-        if not email or not password:
-            raise ValueError(
-                "No LinkedIn credentials configured. "
-                "Set them in Profile."
-            )
         if self._browser_poster is None:
             from app.services.linkedin_poster_browser import LinkedInPosterBrowser
-            self._browser_poster = LinkedInPosterBrowser(email=email, password=password)
+            self._browser_poster = LinkedInPosterBrowser(email=email or "", password=password or "")
         return self._browser_poster
 
     async def run(

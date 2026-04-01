@@ -49,15 +49,11 @@ class RedditAgent:
             from app.services.reddit_poster import RedditPoster
             return RedditPoster(), "api"
 
-        if self.mode == "browser" or (self.mode == "auto" and username and password):
-            if self._browser_poster is None:
-                from app.services.reddit_poster_browser import RedditPosterBrowser
-                self._browser_poster = RedditPosterBrowser(username=username, password=password)
-            return self._browser_poster, "browser"
-
-        raise ValueError(
-            "No Reddit credentials configured. Set them in Profile."
-        )
+        # Browser mode — session may already be saved, credentials optional
+        if self._browser_poster is None:
+            from app.services.reddit_poster_browser import RedditPosterBrowser
+            self._browser_poster = RedditPosterBrowser(username=username or "", password=password or "")
+        return self._browser_poster, "browser"
 
     async def run(
         self,

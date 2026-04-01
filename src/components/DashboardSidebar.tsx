@@ -1,4 +1,4 @@
-import { Search, KeyRound } from "lucide-react";
+import { Search, KeyRound, Bot } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import RedditIcon from "@/components/icons/RedditIcon";
 import LinkedInIcon from "@/components/icons/LinkedInIcon";
@@ -19,6 +19,12 @@ const navSections = [
       { title: "LinkedIn", icon: LinkedInIcon, url: "/linkedin", color: "" },
       { title: "Twitter", icon: TwitterIcon, url: "/twitter", color: "" },
       { title: "Facebook", icon: FacebookIcon, url: "/facebook", color: "" },
+    ],
+  },
+  {
+    label: "AUTOMATION",
+    items: [
+      { title: "Automation", icon: Bot, url: "/automation", color: "" },
     ],
   },
   {
@@ -62,17 +68,6 @@ const DashboardSidebar = () => {
         ))}
       </nav>
 
-      <div className="p-4 border-t border-sidebar-border">
-        <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold">
-            B
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-sidebar-foreground truncate">bilel MAALOUL</p>
-            <p className="text-xs text-sidebar-foreground/60 truncate">bilelmaaloulm@gmail.com</p>
-          </div>
-        </div>
-      </div>
     </aside>
   );
 };

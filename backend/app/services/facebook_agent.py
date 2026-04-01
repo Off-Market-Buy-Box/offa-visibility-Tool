@@ -34,14 +34,9 @@ class FacebookAgent:
         else:
             email = settings.FACEBOOK_EMAIL
             password = settings.FACEBOOK_PASSWORD
-        if not email or not password:
-            raise ValueError(
-                "No Facebook credentials configured. "
-                "Set them in Profile."
-            )
         if self._browser_poster is None:
             from app.services.facebook_poster_browser import FacebookPosterBrowser
-            self._browser_poster = FacebookPosterBrowser(email=email, password=password)
+            self._browser_poster = FacebookPosterBrowser(email=email or "", password=password or "")
         return self._browser_poster
 
     async def run(

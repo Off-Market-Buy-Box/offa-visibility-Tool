@@ -34,14 +34,9 @@ class TwitterAgent:
         else:
             email = settings.TWITTER_EMAIL
             password = settings.TWITTER_PASSWORD
-        if not email or not password:
-            raise ValueError(
-                "No Twitter credentials configured. "
-                "Set them in Profile."
-            )
         if self._browser_poster is None:
             from app.services.twitter_poster_browser import TwitterPosterBrowser
-            self._browser_poster = TwitterPosterBrowser(email=email, password=password)
+            self._browser_poster = TwitterPosterBrowser(email=email or "", password=password or "")
         return self._browser_poster
 
     async def run(

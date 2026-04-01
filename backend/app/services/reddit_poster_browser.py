@@ -86,10 +86,6 @@ class RedditPosterBrowser:
 
     async def post_comment(self, post_url: str, text: str) -> dict:
         """Post a comment by spawning a subprocess with Playwright"""
-        if not self.username or not self.password:
-            raise RuntimeError(
-                "REDDIT_USERNAME and REDDIT_PASSWORD must be set in .env"
-            )
 
         args_json = json.dumps({
             "username": self.username,
@@ -109,13 +105,7 @@ class RedditPosterBrowser:
         return result
 
     async def post_comments_batch(self, posts: list, delay_seconds: int = 30) -> list:
-        """Post comments to multiple threads in one browser session.
-        posts: list of {"id": int, "post_url": str, "text": str}
-        Returns list of result dicts per post.
-        """
-        if not self.username or not self.password:
-            raise RuntimeError("REDDIT_USERNAME and REDDIT_PASSWORD must be set in .env")
-
+        """Post comments to multiple threads in one browser session."""
         args_json = json.dumps({
             "username": self.username,
             "password": self.password,

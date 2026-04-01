@@ -80,10 +80,6 @@ class LinkedInPosterBrowser:
 
     async def post_comment(self, post_url: str, text: str) -> dict:
         """Post a comment by spawning a subprocess with Playwright"""
-        if not self.email or not self.password:
-            raise RuntimeError(
-                "LINKEDIN_EMAIL and LINKEDIN_PASSWORD must be set in .env"
-            )
 
         args_json = json.dumps({
             "email": self.email,
@@ -104,8 +100,6 @@ class LinkedInPosterBrowser:
 
     async def post_comments_batch(self, posts: list, delay_seconds: int = 30) -> list:
         """Post comments to multiple LinkedIn posts in one browser session."""
-        if not self.email or not self.password:
-            raise RuntimeError("LINKEDIN_EMAIL and LINKEDIN_PASSWORD must be set in .env")
 
         args_json = json.dumps({
             "email": self.email,

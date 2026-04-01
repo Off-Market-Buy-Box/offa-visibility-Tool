@@ -68,8 +68,6 @@ class TwitterPosterBrowser:
         self.password = password or settings.TWITTER_PASSWORD
 
     async def post_comment(self, post_url: str, text: str) -> dict:
-        if not self.email or not self.password:
-            raise RuntimeError("TWITTER_EMAIL and TWITTER_PASSWORD must be set in .env")
 
         args_json = json.dumps({
             "email": self.email,
@@ -90,8 +88,6 @@ class TwitterPosterBrowser:
 
     async def post_comments_batch(self, posts: list, delay_seconds: int = 30) -> list:
         """Post replies to multiple tweets in one browser session."""
-        if not self.email or not self.password:
-            raise RuntimeError("TWITTER_EMAIL and TWITTER_PASSWORD must be set in .env")
 
         args_json = json.dumps({
             "email": self.email,

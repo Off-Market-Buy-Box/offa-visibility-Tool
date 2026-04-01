@@ -1,8 +1,6 @@
 """
-Add missing columns to existing tables:
-- ai_metadata: twitter_post_id, facebook_post_id
-- generated_responses: facebook_post_id
-- Creates facebook_posts and platform_credentials tables if they don't exist
+Add all missing columns to existing tables.
+Safe to run multiple times — skips columns that already exist.
 """
 import asyncio
 import sys
@@ -14,7 +12,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy import text
 from app.core.config import settings
 
-# Import all models so Base.metadata knows about them
+# Import all models
 from app.models.keyword import Keyword
 from app.models.ranking import Ranking
 from app.models.competitor import Competitor
@@ -26,48 +24,53 @@ from app.models.facebook_post import FacebookPost
 from app.models.ai_metadata import AIMetadata
 from app.models.generated_response import GeneratedResponse
 from app.models.platform_credential import PlatformCredential
+from app.models.automation_log import AutomationLog
 from app.core.database import Base
+
+
+COLUMNS_TO_ADD = [
+    # linkedin_posts
+    ("linkedin_posts", "agent_posted", "BOOLEAN DEFAULT FALSE"),
+    ("linkedin_posts", "agent_posted_at", "TIMESTAMP"),
+    # twitter_posts
+    ("twitter_posts", "agent_posted", "BOOLEAN DEFAULT FALSE"),
+    ("twitter_posts", "agent_posted_at", "TIMESTAMP"),
+    # reddit_mentions
+    ("reddit_mentions", "agent_posted", "BOOLEAN DEFAULT FALSE"),
+    ("reddit_mentions", "agent_posted_at", "TIMESTAMP"),
+    # ai_metadata
+    ("ai_metadata", "twitter_post_id", "INTEGER REFERENCES twitter_posts(id) ON DELETE CASCADE"),
+    ("ai_metadata", "facebook_post_id", "INTEGER REFERENCES facebook_posts(id) ON DELETE CASCADE"),
+    # generated_responses
+    ("generated_responses", "twitter_post_id", "INTEGER REFERENCES twitter_posts(id) ON DELETE CASCADE"),
+    ("generated_responses", "facebook_post_id", "INTEGER REFERENCES facebook_posts(id) ON DELETE CASCADE"),
+    # platform_credentials
+    ("platform_credentials", "logged_in", "BOOLEAN DEFAULT FALSE"),
+]
 
 
 async def run():
     engine = create_async_engine(settings.DATABASE_URL, echo=False)
 
+    # Create any brand-new tables
     async with engine.begin() as conn:
-        # Create any brand-new tables (facebook_posts, platform_credentials)
         await conn.run_sync(Base.metadata.create_all)
         print("✅ Created any missing tables")
 
-        # Add missing columns to ai_metadata
-        for col, fk_table in [
-            ("twitter_post_id", "twitter_posts"),
-            ("facebook_post_id", "facebook_posts"),
-        ]:
-            try:
+    # Add missing columns — each in its own transaction so one failure doesn't block the rest
+    for table, col, col_type in COLUMNS_TO_ADD:
+        try:
+            async with engine.begin() as conn:
                 await conn.execute(text(
-                    f"ALTER TABLE ai_metadata ADD COLUMN {col} INTEGER REFERENCES {fk_table}(id) ON DELETE CASCADE"
+                    f"ALTER TABLE {table} ADD COLUMN {col} {col_type}"
                 ))
-                print(f"✅ Added ai_metadata.{col}")
-            except Exception as e:
-                if "already exists" in str(e).lower() or "duplicate" in str(e).lower():
-                    print(f"⏭️  ai_metadata.{col} already exists")
-                else:
-                    print(f"⚠️  ai_metadata.{col}: {e}")
-
-        # Add missing columns to generated_responses
-        for col, fk_table in [
-            ("twitter_post_id", "twitter_posts"),
-            ("facebook_post_id", "facebook_posts"),
-        ]:
-            try:
-                await conn.execute(text(
-                    f"ALTER TABLE generated_responses ADD COLUMN {col} INTEGER REFERENCES {fk_table}(id) ON DELETE CASCADE"
-                ))
-                print(f"✅ Added generated_responses.{col}")
-            except Exception as e:
-                if "already exists" in str(e).lower() or "duplicate" in str(e).lower():
-                    print(f"⏭️  generated_responses.{col} already exists")
-                else:
-                    print(f"⚠️  generated_responses.{col}: {e}")
+                print(f"✅ Added {table}.{col}")
+        except Exception as e:
+            err = str(e).lower()
+            if "already exists" in err or "duplicate" in err:
+                print(f"⏭️  {table}.{col} already exists")
+            else:
+                print(f"⚠️  {table}.{col}: {e}")
 
     await engine.dispose()
     print("\n🎉 Done! Database is up to date.")
