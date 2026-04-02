@@ -2,6 +2,7 @@ import hashlib
 import httpx
 import re
 import json
+import random
 from typing import List, Dict, Optional
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,7 +17,7 @@ class LinkedInService:
     def __init__(self):
         self.api_key = settings.SERP_API_KEY
         self.search_url = "https://serpapi.com/search"
-        self.search_queries = [
+        self.all_queries = [
             "off market real estate",
             "off market deals",
             "wholesale real estate",
@@ -29,7 +30,18 @@ class LinkedInService:
             "fix and flip opportunity",
             "real estate wholesale deal",
             "below market value property",
+            "real estate deal flow",
+            "off market multifamily",
+            "commercial real estate investing",
+            "rental property investing",
+            "real estate investor tips",
+            "finding off market deals",
+            "creative real estate financing",
+            "seller financing real estate",
         ]
+
+    def _pick_queries(self, count: int = 8) -> List[str]:
+        return random.sample(self.all_queries, min(count, len(self.all_queries)))
 
     async def search_linkedin(self, query: str, num: int = 50) -> List[Dict]:
         """Search Google for LinkedIn posts matching a query"""
@@ -91,8 +103,8 @@ class LinkedInService:
     async def monitor_linkedin(
         self, db: AsyncSession, keywords: Optional[List[str]] = None
     ) -> Dict:
-        """Search LinkedIn for all configured keywords"""
-        queries = keywords if keywords else self.search_queries
+        """Search LinkedIn for randomized keyword subset"""
+        queries = keywords if keywords else self._pick_queries(8)
         all_results = []
         stats = {"queries_searched": 0, "total_found": 0, "new_saved": 0}
 

@@ -2,6 +2,7 @@ import hashlib
 import httpx
 import re
 import json
+import random
 from typing import List, Dict, Optional
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,7 +17,7 @@ class FacebookService:
     def __init__(self):
         self.api_key = settings.SERP_API_KEY
         self.search_url = "https://serpapi.com/search"
-        self.search_queries = [
+        self.all_queries = [
             "off market real estate",
             "off market deals",
             "wholesale real estate",
@@ -29,7 +30,18 @@ class FacebookService:
             "fix and flip opportunity",
             "real estate wholesale deal",
             "below market value property",
+            "wholesale houses for sale",
+            "off market rental property",
+            "real estate deal",
+            "cash buyer real estate",
+            "driving for dollars",
+            "real estate bird dog",
+            "foreclosure investing",
+            "BRRRR real estate",
         ]
+
+    def _pick_queries(self, count: int = 8) -> List[str]:
+        return random.sample(self.all_queries, min(count, len(self.all_queries)))
 
     async def search_facebook(self, query: str, num: int = 50) -> List[Dict]:
         """Search Google for Facebook posts matching a query"""
@@ -93,8 +105,8 @@ class FacebookService:
     async def monitor_facebook(
         self, db: AsyncSession, keywords: Optional[List[str]] = None
     ) -> Dict:
-        """Search Facebook for all configured keywords"""
-        queries = keywords if keywords else self.search_queries
+        """Search Facebook for randomized keyword subset"""
+        queries = keywords if keywords else self._pick_queries(8)
         all_results = []
         stats = {"queries_searched": 0, "total_found": 0, "new_saved": 0}
 
