@@ -169,7 +169,9 @@ class RedditAgent:
                     stats["errors"].append(f"Thread {thread.id}: {error_msg}")
                     post_info["status"] = "error"
                     post_info["error"] = error_msg
-                    await emit({"type": "log", "emoji": "❌", "message": f"Error: {error_msg}"})
+                    # Remove from queue so we don't retry unreachable posts forever
+                    thread.is_relevant = False
+                    await emit({"type": "log", "emoji": "🗑️", "message": f"Removed from queue (can't comment): {error_msg}"})
                 await emit({"type": "post_result", "index": 0, "post": post_info})
                 stats["posts"].append(post_info)
             await db.commit()
@@ -194,7 +196,10 @@ class RedditAgent:
                     stats["errors"].append(f"Thread {thread.id}: {error_msg}")
                     post_info["status"] = "error"
                     post_info["error"] = error_msg
-                    await emit({"type": "log", "emoji": "❌", "message": f"Error: {error_msg}"})
+                    # Remove from queue so we don't retry unreachable posts forever
+                    thread.is_relevant = False
+                    await db.commit()
+                    await emit({"type": "log", "emoji": "🗑️", "message": f"Removed from queue (can't comment): {error_msg}"})
                 await emit({"type": "post_result", "index": i, "post": post_info})
                 stats["posts"].append(post_info)
                 if thread != batch_items[-1][0]:
