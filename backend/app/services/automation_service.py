@@ -121,14 +121,14 @@ class AutomationService:
 
             self._status["current_platform"] = None
             self._status["last_cycle_at"] = datetime.utcnow().isoformat()
+            delay = self._status["delay_between_cycles"]
 
             if had_work:
-                self._status["current_action"] = "short pause before next cycle"
-                await self._sleep(30)
+                self._status["current_action"] = f"cycle done — waiting {delay}s before next cycle"
+                await self._sleep(delay)
             else:
-                # No work across any platform — wait longer to avoid hammering APIs
-                self._status["current_action"] = "waiting between cycles"
-                await self._sleep(max(self._status["delay_between_cycles"], 60))
+                self._status["current_action"] = f"no new work — waiting {delay}s before next cycle"
+                await self._sleep(delay)
 
         self._status["current_action"] = None
 
