@@ -32,15 +32,7 @@ class TwitterService:
             "wholesale real estate deals",
             "wholesale property",
             "wholesaling houses",
-            # MLS & market
-            "MLS listing real estate",
-            "not on MLS",
-            "real estate market",
-            "housing market",
-            "real estate market trends",
-            "property market update",
-            "home prices",
-            "real estate news",
+            "real estate wholesale deal",
             # Pocket listings
             "pocket listing",
             "pocket listing real estate",
@@ -51,48 +43,33 @@ class TwitterService:
             "rental property deal",
             "buy and hold real estate",
             "cash flowing property",
-            "passive income real estate",
-            "real estate portfolio",
             # Distressed / motivated
             "motivated seller real estate",
+            "distressed property deals",
             "distressed property",
+            "motivated seller",
             "foreclosure deal",
             "pre foreclosure",
-            "bank owned property",
-            "REO property",
-            "short sale real estate",
             # Fix and flip
+            "fix and flip opportunity",
             "fix and flip",
             "fixer upper for sale",
             "rehab property",
-            "house flip",
             # Below market
             "below market value property",
+            "below market value",
             "undervalued property",
             # Deal-finding
+            "how to find off market deals",
             "finding real estate deals",
             "real estate deal flow",
             "driving for dollars",
             "direct mail real estate",
-            "real estate lead generation",
-            # Property types
+            # Specific property types
             "multifamily deal",
             "duplex for sale investor",
             "commercial real estate deal",
             "land deal real estate",
-            "rental property for sale",
-            "turnkey rental property",
-            # General real estate
-            "real estate tips",
-            "first time investor real estate",
-            "real estate agent tips",
-            "house hunting",
-            "property investment",
-            "BRRRR strategy",
-            "seller financing real estate",
-            "creative financing real estate",
-            "real estate wholesaler",
-            "cash buyer real estate",
         ]
 
     def _pick_queries(self, count: int = 8) -> List[str]:

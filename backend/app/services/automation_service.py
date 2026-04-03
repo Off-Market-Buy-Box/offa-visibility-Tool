@@ -1,44 +1,16 @@
 import asyncio
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional
+from datetime import datetime
+from typing import Dict, Optional
 from app.core.database import AsyncSessionLocal
 from app.models.automation_log import AutomationLog
 
 
-# Rate limits per platform
-RATE_LIMITS = {
-    "reddit": {
-        "delay_between_posts": 600,   # 10 minutes between comments
-        "daily_limit": None,           # No daily cap, just time-gated
-        "max_per_run": 1,              # 1 at a time due to 10min gap
-    },
-    "linkedin": {
-        "delay_between_posts": 120,
-        "daily_limit": 30,
-        "max_per_run": 5,
-    },
-    "twitter": {
-        "delay_between_posts": 60,
-        "daily_limit": 100,
-        "max_per_run": 10,
-    },
-    "facebook": {
-        "delay_between_posts": 120,
-        "daily_limit": 50,
-        "max_per_run": 5,
-    },
-}
-
-
 class AutomationService:
-    """Continuous loop: scan → comment → next platform → repeat (with rate limits)"""
+    """Continuous loop: scan → comment → next platform → repeat"""
 
     def __init__(self):
         self._running = False
         self._task: Optional[asyncio.Task] = None
-        self._comment_timestamps: Dict[str, List[datetime]] = {
-            "reddit": [], "linkedin": [], "twitter": [], "facebook": [],
-        }
         self._status: Dict = {
             "running": False,
             "current_platform": None,
@@ -55,52 +27,8 @@ class AutomationService:
             "max_posts_per_run": 10,
         }
 
-    def _prune_old_timestamps(self, platform: str):
-        """Remove timestamps older than 24h"""
-        cutoff = datetime.utcnow() - timedelta(hours=24)
-        self._comment_timestamps[platform] = [
-            ts for ts in self._comment_timestamps[platform] if ts > cutoff
-        ]
-
-    def _get_count_last_24h(self, platform: str) -> int:
-        self._prune_old_timestamps(platform)
-        return len(self._comment_timestamps[platform])
-
-    def _record_comment(self, platform: str, amount: int = 1):
-        now = datetime.utcnow()
-        for _ in range(amount):
-            self._comment_timestamps[platform].append(now)
-
-    def _can_comment(self, platform: str) -> bool:
-        """Check if we're within rate limits for this platform"""
-        limits = RATE_LIMITS.get(platform, {})
-        daily_limit = limits.get("daily_limit")
-        if daily_limit is not None:
-            if self._get_count_last_24h(platform) >= daily_limit:
-                return False
-        return True
-
-    def _get_remaining_24h(self, platform: str) -> Optional[int]:
-        """How many comments left in the rolling 24h window"""
-        limits = RATE_LIMITS.get(platform, {})
-        daily_limit = limits.get("daily_limit")
-        if daily_limit is None:
-            return None
-        return max(0, daily_limit - self._get_count_last_24h(platform))
-
     def get_status(self) -> Dict:
-        status = {**self._status, "running": self._running}
-        status["rate_limits"] = {}
-        for p in ["reddit", "linkedin", "twitter", "facebook"]:
-            limits = RATE_LIMITS.get(p, {})
-            remaining = self._get_remaining_24h(p)
-            status["rate_limits"][p] = {
-                "daily_limit": limits.get("daily_limit"),
-                "used_24h": self._get_count_last_24h(p),
-                "remaining_24h": remaining,
-                "delay_between_posts": limits.get("delay_between_posts", 60),
-            }
-        return status
+        return {**self._status, "running": self._running}
 
     def update_settings(self, settings: Dict):
         for key in ["delay_between_cycles", "max_posts_per_run"]:
@@ -168,12 +96,6 @@ class AutomationService:
 
                 self._status["current_platform"] = platform
 
-                # Check daily rate limit before doing anything
-                if not self._can_comment(platform):
-                    print(f"⏸️ {platform}: 24h limit reached ({RATE_LIMITS[platform].get('daily_limit')} comments), skipping")
-                    self._status["current_action"] = f"24h limit reached"
-                    continue
-
                 # Only scan if no pending posts
                 has_pending = await self._has_pending_posts(platform)
                 if not has_pending:
@@ -182,28 +104,16 @@ class AutomationService:
                     if not self._running:
                         break
 
+                    # Re-check after scan — if still no pending posts, skip commenting
+                    # This prevents the loop from endlessly scanning the same results
                     has_pending = await self._has_pending_posts(platform)
                     if not has_pending:
                         continue
 
-                # Comment on pending posts (respecting rate limits)
+                # Comment on pending posts
                 self._status["current_action"] = "commenting"
-                limits = RATE_LIMITS.get(platform, {})
-                max_per_run = limits.get("max_per_run", 5)
-                delay = limits.get("delay_between_posts", 60)
-
-                # Cap by remaining 24h allowance
-                remaining = self._get_remaining_24h(platform)
-                if remaining is not None:
-                    max_per_run = min(max_per_run, remaining)
-
-                if max_per_run <= 0:
-                    continue
-
-                result = await self._comment(platform, max_posts=max_per_run, delay=delay)
-                posted = result.get("comments_posted", 0)
-                if posted > 0:
-                    self._record_comment(platform, posted)
+                result = await self._comment(platform)
+                if result.get("comments_posted", 0) > 0:
                     had_work = True
 
                 if not self._running:
@@ -216,6 +126,7 @@ class AutomationService:
                 self._status["current_action"] = "short pause before next cycle"
                 await self._sleep(30)
             else:
+                # No work across any platform — wait longer to avoid hammering APIs
                 self._status["current_action"] = "waiting between cycles"
                 await self._sleep(max(self._status["delay_between_cycles"], 60))
 
@@ -259,6 +170,7 @@ class AutomationService:
                     return {}
 
                 self._status["platforms"][platform]["last_scan"] = datetime.utcnow().isoformat()
+                # Only count genuinely new posts, not duplicates
                 self._status["platforms"][platform]["total_scanned"] += new_saved
 
                 log = AutomationLog(
@@ -284,9 +196,10 @@ class AutomationService:
                 pass
             return {"error": str(e)}
 
-    async def _comment(self, platform: str, max_posts: int = 5, delay: int = 60) -> Dict:
+    async def _comment(self, platform: str) -> Dict:
         try:
             async with AsyncSessionLocal() as db:
+                max_posts = self._status["max_posts_per_run"]
                 commented_count = 0
                 error_count = 0
 
@@ -298,6 +211,7 @@ class AutomationService:
                             commented_count += 1
                             self._status["platforms"][platform]["total_commented"] += 1
                             self._status["platforms"][platform]["last_comment"] = datetime.utcnow().isoformat()
+                            # Log each successful comment immediately
                             try:
                                 async with AsyncSessionLocal() as log_db:
                                     log = AutomationLog(
@@ -314,19 +228,19 @@ class AutomationService:
 
                 if platform == "reddit":
                     from app.services.reddit_agent import RedditAgent
-                    agent = RedditAgent(delay_between_posts=delay)
+                    agent = RedditAgent(delay_between_posts=30)
                     stats = await agent.run(db, max_posts=max_posts, on_event=on_event)
                 elif platform == "linkedin":
                     from app.services.linkedin_agent import LinkedInAgent
-                    agent = LinkedInAgent(delay_between_posts=delay)
+                    agent = LinkedInAgent(delay_between_posts=30)
                     stats = await agent.run(db, max_posts=max_posts, on_event=on_event)
                 elif platform == "twitter":
                     from app.services.twitter_agent import TwitterAgent
-                    agent = TwitterAgent(delay_between_posts=delay)
+                    agent = TwitterAgent(delay_between_posts=30)
                     stats = await agent.run(db, max_posts=max_posts, on_event=on_event)
                 elif platform == "facebook":
                     from app.services.facebook_agent import FacebookAgent
-                    agent = FacebookAgent(delay_between_posts=delay)
+                    agent = FacebookAgent(delay_between_posts=30)
                     stats = await agent.run(db, max_posts=max_posts, on_event=on_event)
                 else:
                     return {}
