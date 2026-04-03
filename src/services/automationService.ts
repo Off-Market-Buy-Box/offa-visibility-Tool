@@ -9,6 +9,13 @@ export interface PlatformStatus {
     errors: number;
 }
 
+export interface RateLimitInfo {
+    daily_limit: number | null;
+    used_24h: number;
+    remaining_24h: number | null;
+    delay_between_posts: number;
+}
+
 export interface AutomationStatus {
     running: boolean;
     current_platform: string | null;
@@ -16,6 +23,7 @@ export interface AutomationStatus {
     cycle_count: number;
     last_cycle_at: string | null;
     platforms: Record<string, PlatformStatus>;
+    rate_limits: Record<string, RateLimitInfo>;
     delay_between_platforms: number;
     delay_between_cycles: number;
     max_posts_per_run: number;

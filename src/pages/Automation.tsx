@@ -143,6 +143,15 @@ const Automation = () => {
                                 <span>Last scan: {formatTime(ps.last_scan)}</span>
                                 <span>Last comment: {formatTime(ps.last_comment)}</span>
                             </div>
+                            {status.rate_limits?.[p] && (
+                                <div className="mt-1.5 text-[10px] text-muted-foreground">
+                                    {status.rate_limits[p].daily_limit ? (
+                                        <span>24h: {status.rate_limits[p].used_24h}/{status.rate_limits[p].daily_limit} comments</span>
+                                    ) : (
+                                        <span>1 comment every {Math.round(status.rate_limits[p].delay_between_posts / 60)}min</span>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     );
                 })}

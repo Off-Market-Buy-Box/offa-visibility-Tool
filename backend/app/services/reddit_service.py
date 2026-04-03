@@ -1,4 +1,5 @@
 import httpx
+import random
 from typing import List, Dict, Optional
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -189,10 +190,34 @@ class RedditService:
             "MLS alternatives",
             "off market house",
             "investment property deals",
+            # Broader real estate
+            "real estate investing tips",
+            "rental property",
+            "house flip",
+            "real estate market",
+            "housing market",
+            "property investment",
+            "first time investor",
+            "real estate deal",
+            "seller financing",
+            "creative financing",
+            "BRRRR strategy",
+            "cash flowing property",
+            "foreclosure",
+            "distressed property",
+            "motivated seller",
+            "real estate lead generation",
+            "MLS listing",
+            "real estate agent",
+            "property management",
+            "turnkey rental",
         ]
         
         if keywords:
             search_queries = keywords
+        
+        # Pick a random subset to avoid burning through API calls
+        active_queries = random.sample(search_queries, min(8, len(search_queries)))
         
         all_mentions = []
         stats = {
@@ -207,7 +232,7 @@ class RedditService:
         for subreddit in self.real_estate_subreddits:
             print(f"🔍 Searching r/{subreddit}...")
             
-            for query in search_queries:
+            for query in active_queries:
                 results = await self.search_reddit(query, subreddit=subreddit, limit=limit_per_subreddit)
                 
                 if results:
