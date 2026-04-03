@@ -440,6 +440,98 @@ def do_post_comment(pw, email, password, post_url, text):
         browser.close()
 
 
+def _post_single_linkedin(page, post_url, text, post_id, max_seconds=90):
+    """Post a single LinkedIn comment with a per-post time limit."""
+    import time as _time
+    deadline = _time.time() + max_seconds
+
+    def check_time():
+        if _time.time() > deadline:
+            raise TimeoutError(f"Per-post timeout ({max_seconds}s) exceeded")
+
+    page.goto(post_url, wait_until="domcontentloaded")
+    page.wait_for_timeout(4000)
+    check_time()
+
+    if "/login" in page.url:
+        return {"id": post_id, "error": "Redirected to login — session expired."}
+
+    # Scroll & expand comment box
+    page.evaluate("window.scrollTo(0, 400)")
+    page.wait_for_timeout(1500)
+    check_time()
+
+    page.evaluate("""
+        () => {
+            const placeholders = document.querySelectorAll(
+                '.comments-comment-box-comment__text-editor, '
+                + 'button.comments-comment-texteditor__content, '
+                + '.comments-comment-box__form-container, '
+                + '[placeholder*="Add a comment"], '
+                + '.comments-comment-texteditor, '
+                + 'div.feed-shared-update-v2__comments-container button'
+            );
+            for (const el of placeholders) {
+                const rect = el.getBoundingClientRect();
+                if (rect.width > 50 && rect.height > 0) { el.click(); return; }
+            }
+            const commentBtns = document.querySelectorAll(
+                'button[aria-label*="Comment"], button[aria-label*="comment"]'
+            );
+            for (const btn of commentBtns) {
+                const rect = btn.getBoundingClientRect();
+                if (rect.width > 0 && rect.height > 0) { btn.click(); return; }
+            }
+        }
+    """)
+    page.wait_for_timeout(1500)
+    check_time()
+
+    box = _find_comment_box(page)
+    if not box:
+        page.evaluate("window.scrollTo(0, 600)")
+        page.wait_for_timeout(2000)
+        check_time()
+        page.evaluate("""
+            () => {
+                const btns = document.querySelectorAll(
+                    'button[aria-label*="Comment"], button[aria-label*="comment"]'
+                );
+                for (const btn of btns) { btn.click(); return; }
+            }
+        """)
+        page.wait_for_timeout(1500)
+        box = _find_comment_box(page)
+
+    if not box:
+        return {"id": post_id, "error": "Cannot find comment box"}
+
+    check_time()
+
+    # Type
+    page.mouse.click(box["x"], box["y"])
+    page.wait_for_timeout(500)
+    typed = _type_into_comment_box(page, text)
+    if not typed:
+        page.mouse.click(box["x"] + 5, box["y"] + 5)
+        page.wait_for_timeout(500)
+        typed = _type_into_comment_box(page, text)
+
+    if not typed:
+        return {"id": post_id, "error": "Text verification failed"}
+
+    check_time()
+    page.wait_for_timeout(1000)
+
+    # Submit
+    submitted = _click_submit_button(page)
+    if not submitted:
+        return {"id": post_id, "error": "Cannot find submit button"}
+
+    page.wait_for_timeout(5000)
+    return {"id": post_id, "posted": True, "method": "browser", "comment_url": page.url}
+
+
 def do_batch_post(pw, email, password, posts, delay_seconds=30):
     """Post comments to multiple LinkedIn posts in one browser session."""
     print("STEP:launching_browser", flush=True)
@@ -497,96 +589,32 @@ def do_batch_post(pw, email, password, posts, delay_seconds=30):
             print(f"STEP:batch_post_{idx+1}_of_{len(posts)}", flush=True)
 
             try:
-                page.goto(post_url, wait_until="domcontentloaded")
-                page.wait_for_timeout(5000)
-
-                if "/login" in page.url:
-                    results.append({"id": post_id, "error": "Redirected to login — session expired."})
-                    continue
-
-                # Scroll & expand comment box
-                page.evaluate("window.scrollTo(0, 400)")
-                page.wait_for_timeout(2000)
-
-                page.evaluate("""
-                    () => {
-                        const placeholders = document.querySelectorAll(
-                            '.comments-comment-box-comment__text-editor, '
-                            + 'button.comments-comment-texteditor__content, '
-                            + '.comments-comment-box__form-container, '
-                            + '[placeholder*="Add a comment"], '
-                            + '.comments-comment-texteditor, '
-                            + 'div.feed-shared-update-v2__comments-container button'
-                        );
-                        for (const el of placeholders) {
-                            const rect = el.getBoundingClientRect();
-                            if (rect.width > 50 && rect.height > 0) { el.click(); return; }
-                        }
-                        const commentBtns = document.querySelectorAll(
-                            'button[aria-label*="Comment"], button[aria-label*="comment"]'
-                        );
-                        for (const btn of commentBtns) {
-                            const rect = btn.getBoundingClientRect();
-                            if (rect.width > 0 && rect.height > 0) { btn.click(); return; }
-                        }
-                    }
-                """)
-                page.wait_for_timeout(2000)
-
-                box = _find_comment_box(page)
-                if not box:
-                    page.evaluate("window.scrollTo(0, 600)")
-                    page.wait_for_timeout(3000)
-                    page.evaluate("""
-                        () => {
-                            const btns = document.querySelectorAll(
-                                'button[aria-label*="Comment"], button[aria-label*="comment"]'
-                            );
-                            for (const btn of btns) { btn.click(); return; }
-                        }
-                    """)
-                    page.wait_for_timeout(2000)
-                    box = _find_comment_box(page)
-
-                if not box:
-                    results.append({"id": post_id, "error": "Cannot find comment box"})
-                    continue
-
-                # Type
-                page.mouse.click(box["x"], box["y"])
-                page.wait_for_timeout(500)
-                typed = _type_into_comment_box(page, text)
-                if not typed:
-                    page.mouse.click(box["x"] + 5, box["y"] + 5)
-                    page.wait_for_timeout(500)
-                    typed = _type_into_comment_box(page, text)
-
-                if not typed:
-                    results.append({"id": post_id, "error": "Text verification failed"})
-                    continue
-
-                page.wait_for_timeout(1500)
-
-                # Submit
-                submitted = _click_submit_button(page)
-                if not submitted:
-                    results.append({"id": post_id, "error": "Cannot find submit button"})
-                    continue
-
-                page.wait_for_timeout(6000)
-                results.append({"id": post_id, "posted": True, "method": "browser", "comment_url": page.url})
-                print(f"STEP:batch_post_{idx+1}_done", flush=True)
-
+                result = _post_single_linkedin(page, post_url, text, post_id, max_seconds=90)
+                results.append(result)
+                if result.get("posted"):
+                    print(f"STEP:batch_post_{idx+1}_done", flush=True)
+                else:
+                    print(f"STEP:batch_post_{idx+1}_failed:{result.get('error', 'unknown')}", flush=True)
+            except TimeoutError as e:
+                results.append({"id": post_id, "error": str(e)})
+                print(f"STEP:batch_post_{idx+1}_timeout", flush=True)
             except Exception as e:
                 results.append({"id": post_id, "error": str(e)})
+                print(f"STEP:batch_post_{idx+1}_error:{str(e)[:80]}", flush=True)
 
             if idx < len(posts) - 1:
                 print(f"STEP:waiting_{delay_seconds}s", flush=True)
                 time.sleep(delay_seconds)
 
     finally:
-        page.close()
-        browser.close()
+        try:
+            page.close()
+        except Exception:
+            pass
+        try:
+            browser.close()
+        except Exception:
+            pass
 
     print(json.dumps({"batch_results": results}))
 

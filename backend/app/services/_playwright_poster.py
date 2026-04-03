@@ -577,6 +577,122 @@ def do_post_comment(pw, username, password, post_url, text):
         browser.close()
 
 
+def _post_single_reddit(page, post_url, text, post_id, max_seconds=90):
+    """Post a single Reddit comment with a per-post time limit."""
+    import time as _time
+    deadline = _time.time() + max_seconds
+
+    def check_time():
+        if _time.time() > deadline:
+            raise TimeoutError(f"Per-post timeout ({max_seconds}s) exceeded")
+
+    page.goto(post_url, wait_until="domcontentloaded")
+    page.wait_for_timeout(4000)
+    check_time()
+
+    if "/login" in page.url:
+        return {"id": post_id, "error": "Redirected to login — session expired."}
+
+    # Scroll to comment area
+    page.evaluate("window.scrollTo(0, 300)")
+    page.wait_for_timeout(1500)
+    check_time()
+
+    # Activate comment box
+    page.evaluate("""
+        () => {
+            const composer = document.querySelector('shreddit-composer');
+            if (composer) {
+                composer.click();
+                if (composer.shadowRoot) {
+                    const placeholder = composer.shadowRoot.querySelector(
+                        '[placeholder], [data-placeholder], .placeholder, p'
+                    );
+                    if (placeholder) placeholder.click();
+                    const editorArea = composer.shadowRoot.querySelector(
+                        '[contenteditable], [role="textbox"], .DraftEditor-root, '
+                        + '.public-DraftEditor-content, .notranslate, .ql-editor'
+                    );
+                    if (editorArea) editorArea.click();
+                }
+            }
+            const addComment = document.querySelector(
+                '[placeholder="Add a comment"], [data-testid="comment-composer"]'
+            );
+            if (addComment) addComment.click();
+        }
+    """)
+    page.wait_for_timeout(1500)
+    check_time()
+
+    box = _find_and_activate_comment_box(page)
+    if not box:
+        page.wait_for_timeout(2000)
+        check_time()
+        page.evaluate("""
+            () => {
+                const composer = document.querySelector('shreddit-composer');
+                if (composer) {
+                    composer.click();
+                    if (composer.shadowRoot) {
+                        const divs = composer.shadowRoot.querySelectorAll('div');
+                        for (const d of divs) {
+                            const rect = d.getBoundingClientRect();
+                            if (rect.height > 30 && rect.width > 200) { d.click(); break; }
+                        }
+                    }
+                }
+            }
+        """)
+        page.wait_for_timeout(1500)
+        box = _find_and_activate_comment_box(page)
+
+    if not box:
+        # Try old Reddit
+        check_time()
+        old_url = post_url.replace("www.reddit.com", "old.reddit.com")
+        page.goto(old_url, wait_until="domcontentloaded")
+        page.wait_for_timeout(3000)
+        textarea = page.locator('textarea[name="text"], .usertext-edit textarea').first
+        if textarea.count() > 0 and textarea.is_visible():
+            textarea.click()
+            textarea.fill(text)
+            page.wait_for_timeout(1000)
+            submit = page.locator(
+                'button[type="submit"]:has-text("save"), .save-button button, button:has-text("save")'
+            ).first
+            if submit.count() > 0 and submit.is_visible():
+                submit.click()
+                page.wait_for_timeout(4000)
+                return {"id": post_id, "posted": True, "method": "browser-old-reddit", "comment_url": page.url}
+        return {"id": post_id, "error": "Cannot find comment box"}
+
+    check_time()
+
+    # Type comment
+    page.mouse.click(box["x"], box["y"])
+    page.wait_for_timeout(500)
+    typed = _type_into_comment_box(page, text)
+    if not typed:
+        page.mouse.click(box["x"] + 5, box["y"] + 5)
+        page.wait_for_timeout(500)
+        typed = _type_into_comment_box(page, text)
+
+    if not typed:
+        return {"id": post_id, "error": "Text verification failed"}
+
+    check_time()
+    page.wait_for_timeout(1000)
+
+    # Submit
+    submitted = _click_submit_button(page)
+    if not submitted:
+        return {"id": post_id, "error": "Cannot find submit button"}
+
+    page.wait_for_timeout(5000)
+    return {"id": post_id, "posted": True, "method": "browser", "comment_url": page.url}
+
+
 def do_batch_post(pw, username, password, posts, delay_seconds=30):
     """Post comments to multiple Reddit threads in one browser session."""
     print("STEP:launching_browser", flush=True)
@@ -658,116 +774,18 @@ def do_batch_post(pw, username, password, posts, delay_seconds=30):
             print(f"STEP:batch_post_{idx+1}_of_{len(posts)}", flush=True)
 
             try:
-                print("STEP:navigating_to_post", flush=True)
-                page.goto(post_url, wait_until="domcontentloaded")
-                page.wait_for_timeout(5000)
-
-                if "/login" in page.url:
-                    results.append({"id": post_id, "error": "Redirected to login — session expired."})
-                    continue
-
-                # Scroll to comment area
-                page.evaluate("window.scrollTo(0, 300)")
-                page.wait_for_timeout(2000)
-
-                # Activate comment box
-                page.evaluate("""
-                    () => {
-                        const composer = document.querySelector('shreddit-composer');
-                        if (composer) {
-                            composer.click();
-                            if (composer.shadowRoot) {
-                                const placeholder = composer.shadowRoot.querySelector(
-                                    '[placeholder], [data-placeholder], .placeholder, p'
-                                );
-                                if (placeholder) placeholder.click();
-                                const editorArea = composer.shadowRoot.querySelector(
-                                    '[contenteditable], [role="textbox"], .DraftEditor-root, '
-                                    + '.public-DraftEditor-content, .notranslate, .ql-editor'
-                                );
-                                if (editorArea) editorArea.click();
-                            }
-                        }
-                        const addComment = document.querySelector(
-                            '[placeholder="Add a comment"], [data-testid="comment-composer"]'
-                        );
-                        if (addComment) addComment.click();
-                    }
-                """)
-                page.wait_for_timeout(2000)
-
-                box = _find_and_activate_comment_box(page)
-                if not box:
-                    page.wait_for_timeout(3000)
-                    page.evaluate("""
-                        () => {
-                            const composer = document.querySelector('shreddit-composer');
-                            if (composer) {
-                                composer.click();
-                                if (composer.shadowRoot) {
-                                    const divs = composer.shadowRoot.querySelectorAll('div');
-                                    for (const d of divs) {
-                                        const rect = d.getBoundingClientRect();
-                                        if (rect.height > 30 && rect.width > 200) { d.click(); break; }
-                                    }
-                                }
-                            }
-                        }
-                    """)
-                    page.wait_for_timeout(2000)
-                    box = _find_and_activate_comment_box(page)
-
-                if not box:
-                    # Try old Reddit
-                    old_url = post_url.replace("www.reddit.com", "old.reddit.com")
-                    page.goto(old_url, wait_until="domcontentloaded")
-                    page.wait_for_timeout(4000)
-                    textarea = page.locator('textarea[name="text"], .usertext-edit textarea').first
-                    if textarea.count() > 0 and textarea.is_visible():
-                        textarea.click()
-                        textarea.fill(text)
-                        page.wait_for_timeout(1000)
-                        submit = page.locator(
-                            'button[type="submit"]:has-text("save"), .save-button button, button:has-text("save")'
-                        ).first
-                        if submit.count() > 0 and submit.is_visible():
-                            submit.click()
-                            page.wait_for_timeout(5000)
-                            results.append({"id": post_id, "posted": True, "method": "browser-old-reddit", "comment_url": page.url})
-                            if idx < len(posts) - 1:
-                                time.sleep(delay_seconds)
-                            continue
-                    results.append({"id": post_id, "error": "Cannot find comment box"})
-                    continue
-
-                # Type comment
-                page.mouse.click(box["x"], box["y"])
-                page.wait_for_timeout(500)
-                typed = _type_into_comment_box(page, text)
-                if not typed:
-                    page.mouse.click(box["x"] + 5, box["y"] + 5)
-                    page.wait_for_timeout(500)
-                    typed = _type_into_comment_box(page, text)
-
-                if not typed:
-                    results.append({"id": post_id, "error": "Text verification failed"})
-                    continue
-
-                page.wait_for_timeout(1500)
-
-                # Submit
-                submitted = _click_submit_button(page)
-                if not submitted:
-                    results.append({"id": post_id, "error": "Cannot find submit button"})
-                    continue
-
-                page.wait_for_timeout(6000)
-
-                results.append({"id": post_id, "posted": True, "method": "browser", "comment_url": page.url})
-                print(f"STEP:batch_post_{idx+1}_done", flush=True)
-
+                result = _post_single_reddit(page, post_url, text, post_id, max_seconds=90)
+                results.append(result)
+                if result.get("posted"):
+                    print(f"STEP:batch_post_{idx+1}_done", flush=True)
+                else:
+                    print(f"STEP:batch_post_{idx+1}_failed:{result.get('error', 'unknown')}", flush=True)
+            except TimeoutError as e:
+                results.append({"id": post_id, "error": str(e)})
+                print(f"STEP:batch_post_{idx+1}_timeout", flush=True)
             except Exception as e:
                 results.append({"id": post_id, "error": str(e)})
+                print(f"STEP:batch_post_{idx+1}_error:{str(e)[:80]}", flush=True)
 
             # Delay between posts (not after the last one)
             if idx < len(posts) - 1:
@@ -775,8 +793,14 @@ def do_batch_post(pw, username, password, posts, delay_seconds=30):
                 time.sleep(delay_seconds)
 
     finally:
-        page.close()
-        browser.close()
+        try:
+            page.close()
+        except Exception:
+            pass
+        try:
+            browser.close()
+        except Exception:
+            pass
 
     print(json.dumps({"batch_results": results}))
 

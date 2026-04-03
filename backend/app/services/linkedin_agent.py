@@ -125,12 +125,20 @@ class LinkedInAgent:
         try:
             batch_results = await poster.post_comments_batch(batch_posts, delay_seconds=self.delay)
         except Exception as e:
+            error_msg = str(e)
+            is_timeout = "timed out" in error_msg.lower() or "timeout" in error_msg.lower()
             for thread, post_info, _ in batch_items:
                 post_info["status"] = "error"
-                post_info["error"] = str(e)
-                stats["errors"].append(f"Post {thread.id}: {str(e)}")
+                post_info["error"] = error_msg
+                stats["errors"].append(f"Post {thread.id}: {error_msg}")
+                # If it's a browser crash/timeout, don't mark posts as irrelevant
+                # (they might work next time). Only mark if it's a post-specific issue.
+                if not is_timeout:
+                    thread.is_relevant = False
                 await emit({"type": "post_result", "index": 0, "post": post_info})
                 stats["posts"].append(post_info)
+            if not is_timeout:
+                await db.commit()
             await emit({"type": "log", "emoji": "🏁", "message": f"Done! Generated: {stats['responses_generated']}, Posted: 0, Errors: {len(stats['errors'])}"})
             return stats
 

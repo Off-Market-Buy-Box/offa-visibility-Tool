@@ -183,6 +183,11 @@ async def clear_all_data(db: AsyncSession = Depends(get_db)):
             "total_scanned": 0,
             "errors": 0,
         })
+        # Reset rate limit timestamps
+        automation._comment_timestamps[p] = []
+        # Reset failure tracking
+        automation._consecutive_failures[p] = 0
+        automation._platform_cooldown_until[p] = None
     automation._status["cycle_count"] = 0
     automation._status["last_cycle_at"] = None
 
