@@ -206,63 +206,6 @@ def do_post_comment(pw, email, password, post_url, text):
         browser.close()
 
 
-def _post_single_facebook(page, post_url, text, post_id, max_seconds=90):
-    """Post a single Facebook comment with a per-post time limit."""
-    import time as _time
-    deadline = _time.time() + max_seconds
-
-    def check_time():
-        if _time.time() > deadline:
-            raise TimeoutError(f"Per-post timeout ({max_seconds}s) exceeded")
-
-    page.goto(post_url, wait_until="domcontentloaded")
-    page.wait_for_timeout(3000)
-    check_time()
-
-    comment_box = None
-    for sel in [
-        'div[contenteditable="true"][aria-label*="comment"]',
-        'div[contenteditable="true"][aria-label*="Comment"]',
-        'div[contenteditable="true"][role="textbox"]',
-    ]:
-        try:
-            el = page.locator(sel).first
-            if el.count() > 0 and el.is_visible():
-                comment_box = el
-                break
-        except Exception:
-            continue
-
-    if not comment_box:
-        check_time()
-        try:
-            write_comment = page.locator('div:has-text("Write a comment")').first
-            if write_comment.count() > 0:
-                write_comment.click()
-                page.wait_for_timeout(1500)
-                for sel in ['div[contenteditable="true"][role="textbox"]']:
-                    el = page.locator(sel).first
-                    if el.count() > 0 and el.is_visible():
-                        comment_box = el
-                        break
-        except Exception:
-            pass
-
-    if not comment_box:
-        return {"id": post_id, "posted": False, "error": "Comment box not found"}
-
-    check_time()
-    comment_box.click()
-    page.wait_for_timeout(500)
-    comment_box.type(text, delay=30)
-    page.wait_for_timeout(1000)
-    check_time()
-    page.keyboard.press("Enter")
-    page.wait_for_timeout(3000)
-
-    return {"id": post_id, "posted": True, "comment_url": page.url}
-
-
 def do_batch_post(pw, email, password, posts, delay_seconds=30):
     """Post comments to multiple Facebook posts in one browser session."""
     import time
@@ -299,38 +242,64 @@ def do_batch_post(pw, email, password, posts, delay_seconds=30):
             post_id = post["id"]
             post_url = post["post_url"]
             text = post["text"]
-
-            print(f"STEP:posting_{i+1}_of_{len(posts)}", flush=True)
-
             try:
-                result = _post_single_facebook(page, post_url, text, post_id, max_seconds=90)
-                results.append(result)
-                if result.get("posted"):
-                    print(f"STEP:batch_post_{i+1}_done", flush=True)
-                else:
-                    print(f"STEP:batch_post_{i+1}_failed:{result.get('error', 'unknown')}", flush=True)
-            except TimeoutError as e:
-                results.append({"id": post_id, "posted": False, "error": str(e)})
-                print(f"STEP:batch_post_{i+1}_timeout", flush=True)
+                print(f"STEP:posting_{i+1}_of_{len(posts)}", flush=True)
+                page.goto(post_url, wait_until="domcontentloaded")
+                page.wait_for_timeout(3000)
+
+                comment_box = None
+                for sel in [
+                    'div[contenteditable="true"][aria-label*="comment"]',
+                    'div[contenteditable="true"][aria-label*="Comment"]',
+                    'div[contenteditable="true"][role="textbox"]',
+                ]:
+                    try:
+                        el = page.locator(sel).first
+                        if el.count() > 0 and el.is_visible():
+                            comment_box = el
+                            break
+                    except Exception:
+                        continue
+
+                if not comment_box:
+                    try:
+                        write_comment = page.locator('div:has-text("Write a comment")').first
+                        if write_comment.count() > 0:
+                            write_comment.click()
+                            page.wait_for_timeout(1500)
+                            for sel in ['div[contenteditable="true"][role="textbox"]']:
+                                el = page.locator(sel).first
+                                if el.count() > 0 and el.is_visible():
+                                    comment_box = el
+                                    break
+                    except Exception:
+                        pass
+
+                if not comment_box:
+                    results.append({"id": post_id, "posted": False, "error": "Comment box not found"})
+                    continue
+
+                comment_box.click()
+                page.wait_for_timeout(500)
+                comment_box.type(text, delay=30)
+                page.wait_for_timeout(1000)
+                page.keyboard.press("Enter")
+                page.wait_for_timeout(3000)
+
+                results.append({"id": post_id, "posted": True, "comment_url": page.url})
+
+                if i < len(posts) - 1:
+                    print(f"STEP:waiting_{delay_seconds}s_before_next", flush=True)
+                    time.sleep(delay_seconds)
+
             except Exception as e:
                 results.append({"id": post_id, "posted": False, "error": str(e)})
-                print(f"STEP:batch_post_{i+1}_error:{str(e)[:80]}", flush=True)
-
-            if i < len(posts) - 1:
-                print(f"STEP:waiting_{delay_seconds}s_before_next", flush=True)
-                time.sleep(delay_seconds)
 
         print(json.dumps({"batch_results": results}))
 
     finally:
-        try:
-            page.close()
-        except Exception:
-            pass
-        try:
-            browser.close()
-        except Exception:
-            pass
+        page.close()
+        browser.close()
 
 
 def main():

@@ -1,6 +1,4 @@
 import asyncio
-import os
-import signal
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from app.core.database import AsyncSessionLocal
@@ -31,10 +29,6 @@ RATE_LIMITS = {
     },
 }
 
-# Max consecutive failures before temporarily skipping a platform
-MAX_CONSECUTIVE_FAILURES = 3
-FAILURE_COOLDOWN_SECONDS = 600  # 10 min cooldown after too many failures
-
 
 class AutomationService:
     """Continuous loop: scan → comment → next platform → repeat (with rate limits)"""
@@ -44,15 +38,6 @@ class AutomationService:
         self._task: Optional[asyncio.Task] = None
         self._comment_timestamps: Dict[str, List[datetime]] = {
             "reddit": [], "linkedin": [], "twitter": [], "facebook": [],
-        }
-        # Track active subprocess PIDs so we can kill them on stop
-        self._active_pids: List[int] = []
-        # Track consecutive failures per platform
-        self._consecutive_failures: Dict[str, int] = {
-            "reddit": 0, "linkedin": 0, "twitter": 0, "facebook": 0,
-        }
-        self._platform_cooldown_until: Dict[str, Optional[datetime]] = {
-            "reddit": None, "linkedin": None, "twitter": None, "facebook": None,
         }
         self._status: Dict = {
             "running": False,
@@ -69,25 +54,6 @@ class AutomationService:
             "delay_between_cycles": 10,
             "max_posts_per_run": 10,
         }
-
-    def register_pid(self, pid: int):
-        """Register a subprocess PID for cleanup on stop"""
-        self._active_pids.append(pid)
-
-    def unregister_pid(self, pid: int):
-        """Remove a subprocess PID after it finishes"""
-        if pid in self._active_pids:
-            self._active_pids.remove(pid)
-
-    def _kill_all_subprocesses(self):
-        """Force-kill all tracked browser subprocesses"""
-        for pid in list(self._active_pids):
-            try:
-                os.kill(pid, signal.SIGTERM)
-                print(f"🔪 Killed subprocess PID {pid}")
-            except (OSError, ProcessLookupError):
-                pass
-        self._active_pids.clear()
 
     def _prune_old_timestamps(self, platform: str):
         """Remove timestamps older than 24h"""
@@ -114,31 +80,6 @@ class AutomationService:
                 return False
         return True
 
-    def _is_platform_in_cooldown(self, platform: str) -> bool:
-        """Check if platform is in failure cooldown"""
-        until = self._platform_cooldown_until.get(platform)
-        if until and datetime.utcnow() < until:
-            return True
-        if until and datetime.utcnow() >= until:
-            # Cooldown expired, reset
-            self._platform_cooldown_until[platform] = None
-            self._consecutive_failures[platform] = 0
-        return False
-
-    def _record_failure(self, platform: str):
-        """Record a failure and enter cooldown if too many"""
-        self._consecutive_failures[platform] += 1
-        if self._consecutive_failures[platform] >= MAX_CONSECUTIVE_FAILURES:
-            self._platform_cooldown_until[platform] = (
-                datetime.utcnow() + timedelta(seconds=FAILURE_COOLDOWN_SECONDS)
-            )
-            print(f"⏸️ {platform}: {MAX_CONSECUTIVE_FAILURES} consecutive failures, cooling down for {FAILURE_COOLDOWN_SECONDS}s")
-
-    def _record_success(self, platform: str):
-        """Reset failure counter on success"""
-        self._consecutive_failures[platform] = 0
-        self._platform_cooldown_until[platform] = None
-
     def _get_remaining_24h(self, platform: str) -> Optional[int]:
         """How many comments left in the rolling 24h window"""
         limits = RATE_LIMITS.get(platform, {})
@@ -153,15 +94,11 @@ class AutomationService:
         for p in ["reddit", "linkedin", "twitter", "facebook"]:
             limits = RATE_LIMITS.get(p, {})
             remaining = self._get_remaining_24h(p)
-            cooldown = self._platform_cooldown_until.get(p)
             status["rate_limits"][p] = {
                 "daily_limit": limits.get("daily_limit"),
                 "used_24h": self._get_count_last_24h(p),
                 "remaining_24h": remaining,
                 "delay_between_posts": limits.get("delay_between_posts", 60),
-                "in_cooldown": self._is_platform_in_cooldown(p),
-                "cooldown_until": cooldown.isoformat() if cooldown else None,
-                "consecutive_failures": self._consecutive_failures.get(p, 0),
             }
         return status
 
@@ -182,8 +119,6 @@ class AutomationService:
 
     async def stop(self):
         self._running = False
-        # Kill any running browser subprocesses immediately
-        self._kill_all_subprocesses()
         if self._task and not self._task.done():
             self._task.cancel()
             try:
@@ -233,30 +168,17 @@ class AutomationService:
 
                 self._status["current_platform"] = platform
 
-                # Check failure cooldown
-                if self._is_platform_in_cooldown(platform):
-                    cooldown = self._platform_cooldown_until.get(platform)
-                    remaining = int((cooldown - datetime.utcnow()).total_seconds()) if cooldown else 0
-                    print(f"⏸️ {platform}: in cooldown ({remaining}s remaining), skipping")
-                    self._status["current_action"] = f"cooldown ({remaining}s)"
-                    continue
-
                 # Check daily rate limit before doing anything
                 if not self._can_comment(platform):
                     print(f"⏸️ {platform}: 24h limit reached ({RATE_LIMITS[platform].get('daily_limit')} comments), skipping")
-                    self._status["current_action"] = "24h limit reached"
+                    self._status["current_action"] = f"24h limit reached"
                     continue
 
                 # Only scan if no pending posts
                 has_pending = await self._has_pending_posts(platform)
                 if not has_pending:
                     self._status["current_action"] = "scanning"
-                    try:
-                        scan_result = await self._scan(platform)
-                    except Exception as e:
-                        print(f"❌ {platform} scan error: {e}")
-                        self._record_failure(platform)
-                        continue
+                    scan_result = await self._scan(platform)
                     if not self._running:
                         break
 
@@ -278,25 +200,11 @@ class AutomationService:
                 if max_per_run <= 0:
                     continue
 
-                try:
-                    result = await self._comment(platform, max_posts=max_per_run, delay=delay)
-                    posted = result.get("comments_posted", 0)
-                    errors = len(result.get("errors", []))
-
-                    if posted > 0:
-                        self._record_comment(platform, posted)
-                        self._record_success(platform)
-                        had_work = True
-                    elif errors > 0 and posted == 0:
-                        # All posts in this run failed
-                        self._record_failure(platform)
-                    else:
-                        # No posts found to comment on
-                        self._record_success(platform)
-
-                except Exception as e:
-                    print(f"❌ {platform} comment error: {e}")
-                    self._record_failure(platform)
+                result = await self._comment(platform, max_posts=max_per_run, delay=delay)
+                posted = result.get("comments_posted", 0)
+                if posted > 0:
+                    self._record_comment(platform, posted)
+                    had_work = True
 
                 if not self._running:
                     break

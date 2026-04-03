@@ -14,9 +14,6 @@ export interface RateLimitInfo {
     used_24h: number;
     remaining_24h: number | null;
     delay_between_posts: number;
-    in_cooldown: boolean;
-    cooldown_until: string | null;
-    consecutive_failures: number;
 }
 
 export interface AutomationStatus {

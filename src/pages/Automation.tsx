@@ -144,17 +144,11 @@ const Automation = () => {
                                 <span>Last comment: {formatTime(ps.last_comment)}</span>
                             </div>
                             {status.rate_limits?.[p] && (
-                                <div className="mt-1.5 text-[10px] text-muted-foreground space-y-0.5">
+                                <div className="mt-1.5 text-[10px] text-muted-foreground">
                                     {status.rate_limits[p].daily_limit ? (
-                                        <div>24h: {status.rate_limits[p].used_24h}/{status.rate_limits[p].daily_limit} comments</div>
+                                        <span>24h: {status.rate_limits[p].used_24h}/{status.rate_limits[p].daily_limit} comments</span>
                                     ) : (
-                                        <div>1 comment every {Math.round(status.rate_limits[p].delay_between_posts / 60)}min</div>
-                                    )}
-                                    {status.rate_limits[p].in_cooldown && (
-                                        <div className="text-yellow-500 font-medium">Cooldown (too many errors)</div>
-                                    )}
-                                    {status.rate_limits[p].consecutive_failures > 0 && !status.rate_limits[p].in_cooldown && (
-                                        <div className="text-red-400">{status.rate_limits[p].consecutive_failures} consecutive failures</div>
+                                        <span>1 comment every {Math.round(status.rate_limits[p].delay_between_posts / 60)}min</span>
                                     )}
                                 </div>
                             )}

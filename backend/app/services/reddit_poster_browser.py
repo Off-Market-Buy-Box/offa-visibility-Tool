@@ -29,37 +29,7 @@ def _run_poster_subprocess_with_timeout(python_exe: str, script_path: str, args_
         stderr=subprocess.PIPE,
     )
 
-    pid = proc.pid
-    try:
-        from app.services.automation_service import automation
-        automation.register_pid(pid)
-    except Exception:
-        pass
-
-    try:
-        stdout_bytes, stderr_bytes = proc.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        print(f"  ⏰ Reddit Browser: timeout after {timeout}s, killing PID {pid}")
-        try:
-            proc.kill()
-            proc.wait(timeout=10)
-        except Exception:
-            pass
-        try:
-            if sys.platform == "win32":
-                subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)],
-                               capture_output=True, timeout=5)
-            else:
-                os.killpg(os.getpgid(pid), 9)
-        except Exception:
-            pass
-        raise RuntimeError(f"Browser subprocess timed out after {timeout}s and was killed")
-    finally:
-        try:
-            from app.services.automation_service import automation
-            automation.unregister_pid(pid)
-        except Exception:
-            pass
+    stdout_bytes, stderr_bytes = proc.communicate(timeout=timeout)
 
     stdout = stdout_bytes.decode("utf-8", errors="replace").strip()
     stderr = stderr_bytes.decode("utf-8", errors="replace").strip()
@@ -144,7 +114,8 @@ class RedditPosterBrowser:
         })
 
         loop = asyncio.get_running_loop()
-        timeout = max(300, len(posts) * 120 + len(posts) * delay_seconds + 120)
+        # Increase timeout for batch: 180s per post
+        timeout = max(300, len(posts) * 180 + len(posts) * delay_seconds)
         result = await loop.run_in_executor(
             _executor,
             _run_poster_subprocess_with_timeout,
