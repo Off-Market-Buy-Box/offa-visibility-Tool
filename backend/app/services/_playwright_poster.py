@@ -231,7 +231,7 @@ def _type_into_comment_box(page, text):
 
     # Type the text character by character via keyboard
     # This is the ONLY reliable way to input text into Lexical editors
-    page.keyboard.type(text, delay=8)
+    page.keyboard.type(text, delay=55)
     page.wait_for_timeout(1000)
 
     # Verify text was actually entered by checking the editor content
@@ -916,6 +916,14 @@ def do_create_post(pw, username, password, subreddit, title, body):
 
         print("STEP:on_submit_page", flush=True)
 
+        # Check if subreddit is private/restricted
+        page_text = page.inner_text("body")
+        if "private community" in page_text.lower() or "request to join" in page_text.lower() or "approved members" in page_text.lower():
+            print(json.dumps({
+                "error": f"r/{subreddit} is a private/restricted community — cannot post"
+            }))
+            sys.exit(1)
+
         # === CLICK TEXT TAB ===
         print("STEP:selecting_text_tab", flush=True)
         page.evaluate("""
@@ -997,9 +1005,94 @@ def do_create_post(pw, username, password, subreddit, title, body):
         page.keyboard.press("Control+a")
         page.keyboard.press("Backspace")
         page.wait_for_timeout(200)
-        page.keyboard.type(title, delay=10)
+        page.keyboard.type(title, delay=50)
         page.wait_for_timeout(1000)
         print("STEP:title_typed", flush=True)
+
+        # === SELECT FLAIR ===
+        print("STEP:selecting_flair", flush=True)
+        page.wait_for_timeout(1000)
+        try:
+            # Click "Add flair and tags" button
+            flair_opened = False
+            for sel in [
+                'button:has-text("Add flair")',
+                'button:has-text("flair")',
+                ':text("Add flair and tags")',
+                'button:has-text("Add tags")',
+            ]:
+                try:
+                    el = page.locator(sel).first
+                    if el.count() > 0 and el.is_visible():
+                        el.click()
+                        page.wait_for_timeout(2000)
+                        flair_opened = True
+                        print("STEP:flair_dialog_opened", flush=True)
+                        break
+                except Exception:
+                    continue
+
+            if flair_opened:
+                # Click the first non-"No flair" radio option using JS
+                picked = page.evaluate("""
+                    () => {
+                        // Find the flair dialog
+                        const labels = document.querySelectorAll('label, [role="radio"], [role="option"]');
+                        for (const label of labels) {
+                            const text = label.textContent.trim();
+                            // Skip non-flair items
+                            if (!text || text === 'No flair' || text === 'Search'
+                                || text.includes('NSFW') || text.includes('Spoiler')
+                                || text.includes('Brand') || text.includes('Cancel')
+                                || text.includes('Add') || text.includes('Tags')
+                                || text.includes('View all') || text.length > 40) continue;
+                            // Click the radio/label
+                            const radio = label.querySelector('input[type="radio"]');
+                            if (radio) { radio.click(); return text; }
+                            label.click();
+                            return text;
+                        }
+                        // Fallback: click any circle/radio that's not selected
+                        const radios = document.querySelectorAll('input[type="radio"]:not(:checked)');
+                        for (const r of radios) {
+                            const parent = r.closest('label') || r.parentElement;
+                            const text = (parent ? parent.textContent : '').trim();
+                            if (text && text !== 'No flair' && !text.includes('NSFW')) {
+                                r.click();
+                                return text;
+                            }
+                        }
+                        return null;
+                    }
+                """)
+
+                if picked:
+                    print(f"STEP:flair_picked:{picked}", flush=True)
+                    page.wait_for_timeout(500)
+                    # Click the blue "Add" button
+                    for sel in ['button:has-text("Add")', 'button:has-text("Apply")', 'button:has-text("Done")']:
+                        try:
+                            btn = page.locator(sel).first
+                            if btn.count() > 0 and btn.is_visible():
+                                btn.click()
+                                page.wait_for_timeout(1500)
+                                print("STEP:flair_added", flush=True)
+                                break
+                        except Exception:
+                            continue
+                else:
+                    print("STEP:no_flair_to_pick", flush=True)
+                    # Close dialog
+                    try:
+                        page.locator('button:has-text("Cancel")').first.click()
+                        page.wait_for_timeout(500)
+                    except Exception:
+                        page.keyboard.press("Escape")
+                        page.wait_for_timeout(500)
+            else:
+                print("STEP:no_flair_button_found", flush=True)
+        except Exception as e:
+            print(f"STEP:flair_error:{e}", flush=True)
 
         # === FILL BODY ===
         # The body editor is a Lexical rich-text editor — same as comment box

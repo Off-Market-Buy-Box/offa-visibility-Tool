@@ -1,10 +1,14 @@
 import asyncio
+import hashlib
 import httpx
+import random
+import re
 from typing import List, Dict, Optional
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.reddit_mention import RedditMention
+from app.core.config import settings
 
 class RedditService:
     """Service for monitoring Reddit mentions of real estate and offa.com"""
@@ -44,6 +48,59 @@ class RedditService:
             "HomeImprovement",
         ]
     
+    async def search_reddit_serp(self, query: str, subreddit: str = None, num: int = 50) -> List[Dict]:
+        """Search Reddit via SerpAPI Google search — no rate limits"""
+        results = []
+        if subreddit:
+            full_query = f'site:reddit.com/r/{subreddit} "{query}"'
+        else:
+            full_query = f'site:reddit.com "{query}"'
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            try:
+                response = await client.get(
+                    "https://serpapi.com/search",
+                    params={"engine": "google", "q": full_query, "api_key": settings.SERP_API_KEY, "num": num},
+                )
+                response.raise_for_status()
+                data = response.json()
+
+                for item in data.get("organic_results", []):
+                    url = item.get("link", "")
+                    title = item.get("title", "")
+                    snippet = item.get("snippet", "")
+
+                    # Only keep actual Reddit post URLs (not user profiles, wiki, etc.)
+                    if not re.search(r"reddit\.com/r/[^/]+/comments/", url):
+                        continue
+
+                    # Extract subreddit and post_id from URL
+                    match = re.search(r"reddit\.com/r/([^/]+)/comments/([^/]+)", url)
+                    if not match:
+                        continue
+
+                    sub_name = match.group(1)
+                    post_id = match.group(2)
+                    combined = (title + " " + snippet).lower()
+
+                    results.append({
+                        "post_id": post_id,
+                        "subreddit": sub_name,
+                        "title": title.replace(f" : r/{sub_name}", "").replace(f" : {sub_name}", "").strip(),
+                        "author": "[unknown]",
+                        "content": snippet,
+                        "url": url.split("?")[0],
+                        "score": 0,
+                        "num_comments": 0,
+                        "keywords_matched": query,
+                        "posted_at": datetime.utcnow(),
+                        "is_relevant": self._check_relevance(combined),
+                    })
+            except Exception as e:
+                print(f"❌ Error searching Reddit via SerpAPI: {e}")
+
+        return results
+
     async def search_reddit(
         self,
         query: str,
@@ -241,30 +298,17 @@ class RedditService:
             "ai_filtered_out": 0,
         }
 
-        # Search with multiple sort orders for broader coverage
-        sort_orders = ["relevance", "new", "hot"]
-
-        # Search across real estate subreddits
+        # Search across real estate subreddits using SerpAPI (no rate limits)
         for subreddit in self.real_estate_subreddits:
             print(f"🔍 Searching r/{subreddit}...")
             
             for query in search_queries:
-                for sort in sort_orders:
-                    results = await self.search_reddit(
-                        query,
-                        subreddit=subreddit,
-                        sort=sort,
-                        limit=limit_per_subreddit,
-                        time_filter="month",
-                    )
-                    
-                    if results:
-                        all_mentions.extend(results)
-                        
-                        offa_count = sum(1 for m in results if "offa" in (m.get("content", "") + m.get("title", "")).lower())
-                        stats["offa_mentions"] += offa_count
-                        
-                        print(f"  ✅ '{query}' ({sort}): {len(results)} results")
+                # Use SerpAPI (Google) — no Reddit rate limits
+                results = await self.search_reddit_serp(query, subreddit=subreddit, num=50)
+                
+                if results:
+                    all_mentions.extend(results)
+                    print(f"  ✅ '{query}': {len(results)} results")
             
             stats["subreddits_checked"] += 1
         

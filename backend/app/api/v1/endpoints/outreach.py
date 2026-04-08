@@ -10,38 +10,27 @@ from app.services.outreach_service import outreach_automation
 
 router = APIRouter()
 
-# Real estate / off-market / wholesaling / investing subreddits
+# Only PUBLIC subreddits where anyone can post (no private/restricted)
 DEFAULT_SUBREDDITS = [
-    # --- Wholesaling & Off-Market ---
-    {"name": "r/WholesaleRealestate", "url": "https://www.reddit.com/r/WholesaleRealestate/"},
-    {"name": "r/wholesaling", "url": "https://www.reddit.com/r/wholesaling/"},
-    {"name": "r/RealEstateWholesaling", "url": "https://www.reddit.com/r/RealEstateWholesaling/"},
-    # --- Real Estate Investing ---
+    # --- Real Estate Investing (open, large) ---
     {"name": "r/realestateinvesting", "url": "https://www.reddit.com/r/realestateinvesting/"},
     {"name": "r/RealEstate", "url": "https://www.reddit.com/r/RealEstate/"},
     {"name": "r/CommercialRealEstate", "url": "https://www.reddit.com/r/CommercialRealEstate/"},
     {"name": "r/rentalproperty", "url": "https://www.reddit.com/r/rentalproperty/"},
     {"name": "r/landlord", "url": "https://www.reddit.com/r/landlord/"},
-    {"name": "r/PropertyManagement", "url": "https://www.reddit.com/r/PropertyManagement/"},
+    # --- Wholesaling (open) ---
+    {"name": "r/WholesaleRealestate", "url": "https://www.reddit.com/r/WholesaleRealestate/"},
+    {"name": "r/wholesaling", "url": "https://www.reddit.com/r/wholesaling/"},
+    # --- Flipping (open) ---
     {"name": "r/Flipping", "url": "https://www.reddit.com/r/Flipping/"},
-    # --- House Flipping & BRRRR ---
-    {"name": "r/HouseFlipping", "url": "https://www.reddit.com/r/HouseFlipping/"},
-    {"name": "r/BRRRR", "url": "https://www.reddit.com/r/BRRRR/"},
     {"name": "r/fixandflip", "url": "https://www.reddit.com/r/fixandflip/"},
-    # --- Market & Buyers ---
-    {"name": "r/HousingMarket", "url": "https://www.reddit.com/r/HousingMarket/"},
+    # --- Buyers & Market (open) ---
     {"name": "r/FirstTimeHomeBuyer", "url": "https://www.reddit.com/r/FirstTimeHomeBuyer/"},
-    {"name": "r/REBubble", "url": "https://www.reddit.com/r/REBubble/"},
     {"name": "r/homeowners", "url": "https://www.reddit.com/r/homeowners/"},
-    # --- Creative Finance & Foreclosures ---
-    {"name": "r/SubjectTo", "url": "https://www.reddit.com/r/SubjectTo/"},
-    {"name": "r/SellerFinancing", "url": "https://www.reddit.com/r/SellerFinancing/"},
-    {"name": "r/foreclosure", "url": "https://www.reddit.com/r/foreclosure/"},
-    {"name": "r/tax_liens", "url": "https://www.reddit.com/r/tax_liens/"},
-    # --- Entrepreneurship & Side Hustles ---
+    {"name": "r/REBubble", "url": "https://www.reddit.com/r/REBubble/"},
+    # --- Entrepreneurship (open, large) ---
     {"name": "r/Entrepreneur", "url": "https://www.reddit.com/r/Entrepreneur/"},
     {"name": "r/smallbusiness", "url": "https://www.reddit.com/r/smallbusiness/"},
-    {"name": "r/sidehustle", "url": "https://www.reddit.com/r/sidehustle/"},
     {"name": "r/passive_income", "url": "https://www.reddit.com/r/passive_income/"},
     # --- Financial Independence ---
     {"name": "r/financialindependence", "url": "https://www.reddit.com/r/financialindependence/"},

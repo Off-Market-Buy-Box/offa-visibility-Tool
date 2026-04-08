@@ -225,7 +225,7 @@ def do_post_comment(pw, email, password, post_url, text):
         print("STEP:typing_comment", flush=True)
         comment_box.click()
         page.wait_for_timeout(500)
-        comment_box.type(text, delay=30)
+        comment_box.type(text, delay=55)
         page.wait_for_timeout(1000)
 
         print("STEP:submitting_comment", flush=True)
@@ -318,7 +318,7 @@ def do_batch_post(pw, email, password, posts, delay_seconds=30):
 
                 comment_box.click()
                 page.wait_for_timeout(500)
-                comment_box.type(text, delay=30)
+                comment_box.type(text, delay=55)
                 page.wait_for_timeout(1000)
                 page.keyboard.press("Enter")
                 page.wait_for_timeout(3000)
@@ -417,7 +417,7 @@ def do_post_to_group(pw, email, password, group_url, text):
         print("STEP:typing_post", flush=True)
         editor.click()
         page.wait_for_timeout(500)
-        editor.type(text, delay=25)
+        editor.type(text, delay=55)
         page.wait_for_timeout(1000)
 
         # Click Post button

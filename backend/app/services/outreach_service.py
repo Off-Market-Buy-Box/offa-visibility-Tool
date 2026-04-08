@@ -140,15 +140,19 @@ class OutreachService:
                         print(f"✅ Posted to {target.name}")
 
                     except Exception as e:
-                        print(f"❌ Error posting to {target.name}: {e}")
-                        import traceback
-                        traceback.print_exc()
+                        error_msg = str(e)
+                        print(f"❌ Error posting to {target.name}: {error_msg}")
                         self._status["total_errors"] += 1
                         try:
                             post.status = "error"
-                            post.error = str(e)
+                            post.error = error_msg
                         except Exception:
                             pass
+
+                        # Auto-disable this subreddit so we don't retry it
+                        target.enabled = False
+                        print(f"🗑️ Disabled {target.name} — error: {error_msg[:100]}")
+
                         if raise_errors:
                             await db.commit()
                             raise

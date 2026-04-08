@@ -196,7 +196,7 @@ def _type_into_reply_box(page, text):
     page.keyboard.press("Control+a")
     page.keyboard.press("Backspace")
     page.wait_for_timeout(300)
-    page.keyboard.type(text, delay=8)
+    page.keyboard.type(text, delay=55)
     page.wait_for_timeout(1000)
 
     has_content = page.evaluate("""

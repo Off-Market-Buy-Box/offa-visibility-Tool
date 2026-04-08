@@ -133,31 +133,13 @@ Return ONLY valid JSON, no markdown formatting."""
         if metadata:
             context = f"\nAI Analysis - Intent: {metadata.intent}, Topic: {metadata.main_topic}, Sentiment: {metadata.sentiment}"
 
-        # Alternate link between offa.com and offa.ai based on mention id
-        if mention_id % 2 == 0:
-            offa_link = "[Offa](https://offa.com)"
-            offa_plain = "Offa"
-        else:
-            offa_link = "[Offa.ai](https://offa.ai)"
-            offa_plain = "Offa.ai"
-
-        prompt = f"""Write a short Reddit comment replying to this post. 2-3 sentences MAX, like a real person typing fast.
-
-STRATEGY: You already use {offa_plain} and casually mention it as something that works for you, then give helpful advice AND ask a follow-up question. The goal is to make readers curious without selling it. Examples:
-- "I've been using {offa_link} for the automated offer side and it's been catching some good price drops. For [topic], I'd also suggest..."
-- "{offa_link} handles most of my deal sourcing now but for [topic] you might want to..."
-- "Yeah I had the same issue until I started using {offa_link} for the MLS automation part. Have you tried..."
-
-ABOUT OFFA: AI-powered MLS automation platform. Scans 5M+ properties daily, auto-sends offers to listing agents, negotiates using real comps, delivers pre-analyzed deals.
+        prompt = f"""Write a short Reddit comment replying to this post. 2-3 sentences MAX.
 
 Rules:
-- 2-3 sentences ONLY. Short and punchy like real Reddit comments.
-- Include EXACTLY ONE markdown link to {offa_plain} using this exact format: {offa_link} — weave it naturally into the sentence
-- Do NOT include both offa.com and offa.ai — only use {offa_link}
-- Mention it casually as something you already use — NOT as a recommendation
-- Give actual helpful advice relevant to the post
-- Sound like a normal person on Reddit, not a marketer
-- No "check out", no sales language
+- Lead with helpful advice first, then casually mention you use Offa for MLS automation
+- Just say "Offa" — no URLs, no links, no offa.ai, no offa.com
+- Keep it brief — don't describe Offa in detail, just mention it naturally
+- Sound like a real person on Reddit, not a marketer
 
 Post: {mention.title}
 r/{mention.subreddit}
@@ -412,30 +394,13 @@ Return ONLY valid JSON, no markdown formatting."""
         if len(text) > 6000:
             text = text[:6000] + "..."
 
-        # Alternate link between offa.com and offa.ai based on post id
-        if post_id % 2 == 0:
-            offa_link = "[Offa](https://offa.com)"
-            offa_plain = "Offa"
-        else:
-            offa_link = "[Offa.ai](https://offa.ai)"
-            offa_plain = "Offa.ai"
-
         prompt = f"""Write a short LinkedIn comment replying to this post. 2-4 sentences MAX.
 
-STRATEGY: You already use {offa_plain} and mention it casually as part of your workflow, then give value and ask a question. Make readers curious without selling it.
-- "We've been using {offa_link} for the automated MLS offer side and it's streamlined our deal flow significantly. For [topic], I'd also recommend..."
-- "{offa_link} handles our property analysis and offer automation, but for [topic] we've found that..."
-
-ABOUT OFFA: AI-powered MLS automation. Scans 5M+ properties daily, auto-sends offers, negotiates with listing agents using real comps, delivers pre-analyzed deals.
-
 Rules:
-- 2-4 sentences ONLY. Professional but conversational.
-- Include EXACTLY ONE markdown link to {offa_plain} using this exact format: {offa_link} — weave it naturally into the sentence
-- Do NOT include both offa.com and offa.ai — only use {offa_link}
-- Mention it casually as something you use — NOT as a pitch
-- Give actual value relevant to the post
-- Professional LinkedIn tone, first person
-- No "check out", no sales language
+- Lead with value relevant to the post, then mention you use Offa for deal automation
+- Just say "Offa" — no URLs, no links, no offa.ai, no offa.com
+- Professional but conversational LinkedIn tone
+- Don't describe Offa in detail — just mention it briefly as part of your workflow
 
 Post: {post.title}
 Author: {post.author or 'Unknown'}
@@ -561,32 +526,12 @@ Return ONLY valid JSON, no markdown formatting."""
 
         text = post.content or post.snippet or ""
 
-        # Alternate link based on post id
-        if post_id % 2 == 0:
-            offa_link = "[Offa](https://offa.com)"
-            offa_plain = "Offa"
-            offa_url = "offa.com"
-        else:
-            offa_link = "[Offa.ai](https://offa.ai)"
-            offa_plain = "Offa.ai"
-            offa_url = "offa.ai"
-
         prompt = f"""Write a short Twitter reply to this tweet. 1-2 sentences MAX, under 280 characters.
 
-STRATEGY: Casually mention {offa_plain} as something you already use, then engage with the tweet topic. Make people curious.
-- "been using {offa_url} for the automated offer part, looking for more tools for [topic] tho"
-- "{offa_url} handles my MLS deal sourcing but yeah [relevant reply to tweet]"
-
-ABOUT OFFA: AI MLS automation — scans properties, sends offers, negotiates with agents automatically.
-
 Rules:
-- 1-2 sentences ONLY. Under 280 chars.
-- Include the plain URL {offa_url} once (Twitter auto-links URLs, no markdown needed)
-- Do NOT include both offa.com and offa.ai — only use {offa_url}
-- Mention it casually as something you use
-- Be relevant to the tweet
-- No hashtags, no sales language
-- Casual Twitter energy
+- Engage with the tweet topic, casually mention you use Offa
+- Just say "Offa" — no URLs, no links, no domains
+- Casual Twitter energy, keep it short
 
 Tweet by {post.author or 'someone'}:
 {text}{context}"""
@@ -709,30 +654,13 @@ Return ONLY valid JSON, no markdown formatting."""
 
         text = post.content or post.snippet or ""
 
-        # Alternate link based on post id
-        if post_id % 2 == 0:
-            offa_link = "offa.com"
-            offa_plain = "Offa"
-        else:
-            offa_link = "offa.ai"
-            offa_plain = "Offa.ai"
-
         prompt = f"""Write a Facebook comment reply to this post. 2-3 sentences.
 
-STRATEGY: Casually mention {offa_plain} as something you already use, give helpful advice, and ask a question. Make people curious without selling it.
-- "I've been using {offa_link} for the automated MLS offers and it's been great for [topic]. Have you also tried..."
-- "{offa_link} handles most of my deal sourcing now, but for [topic] I'd suggest..."
-
-ABOUT OFFA: AI MLS automation — scans 5M+ properties daily, sends offers, negotiates with agents.
-
 Rules:
-- 2-3 sentences, conversational and friendly
-- Include the plain URL {offa_link} once in the text (Facebook auto-links URLs)
-- Do NOT include both offa.com and offa.ai — only use {offa_link}
-- Mention it casually as something you use
-- Be relevant to the post
-- No hashtags, no sales language
-- Friendly Facebook energy
+- Give helpful advice, casually mention you use Offa for deal sourcing/automation
+- Just say "Offa" — no URLs, no links, no domains
+- Friendly conversational tone
+- Don't describe Offa in detail — just mention it briefly
 
 Post by {post.author or 'someone'}:
 {text}{context}"""
@@ -813,17 +741,6 @@ Write ONLY the post text, nothing else."""
     async def generate_reddit_outreach_post(self, subreddit: str = "realestateinvesting", past_titles: list = None) -> dict:
         """Generate a short Reddit post that makes people curious about Offa"""
 
-        # Alternate link based on hash of subreddit name
-        pick = hash(subreddit) % 2
-        if pick == 0:
-            offa_link = "[Offa](https://offa.com)"
-            offa_plain = "Offa"
-            offa_url = "offa.com"
-        else:
-            offa_link = "[Offa.ai](https://offa.ai)"
-            offa_plain = "Offa.ai"
-            offa_url = "offa.ai"
-
         past_context = ""
         if past_titles:
             past_context = "\n\nDO NOT repeat or rephrase these titles (already posted):\n" + "\n".join(f"- {t}" for t in past_titles[-20:])
@@ -832,27 +749,10 @@ Write ONLY the post text, nothing else."""
 
 Return a JSON object with "title" and "body".
 
-STRATEGY: You already use {offa_plain} and love it. Now you're asking for MORE tools/alternatives to complement it. This makes readers curious about {offa_plain} without you selling it. Examples of the vibe:
-- "I've been using {offa_link} for automated MLS offers and it's been solid — what else are you guys using to find deals?"
-- "{offa_link} handles my offer automation but I still need help with [X] — recommendations?"
-- "Between {offa_link} and driving for dollars I'm finding decent deals, what other methods work for you?"
-
-ABOUT OFFA: AI-powered MLS automation. Scans 5M+ properties daily, detects price drops/motivated sellers, calculates ARV/rehab/ROI, sends offers to listing agents autonomously 24/7, negotiates using real comps. Delivers pre-analyzed pre-negotiated deals.
-
-TITLE RULES:
-- Real Reddit title — question asking for advice/alternatives/more tools
-- 5-12 words, casual{past_context}
-
-BODY RULES:
-- ONE short paragraph. 2-4 sentences max.
-- Include EXACTLY ONE markdown link using this exact format: {offa_link} — weave it naturally
-- Do NOT include both offa.com and offa.ai — only use {offa_link}
-- Casually mention what {offa_plain} does for you (like it's obvious, not promotional)
-- Then ask for other tools, methods, or advice to complement it
-- Sound like a real investor sharing and asking — NOT selling
-- End with a genuine question
-- NO bullet points
-- Keep it relevant to r/{subreddit}
+RULES:
+- Title: 5-10 words, genuine question about real estate. Do NOT mention Offa in title.{past_context}
+- Body: 2-3 sentences MAX. Ask a real question about deals/investing. Mention "Offa" once casually as a tool you use — no URLs, no links, no offa.ai, no offa.com. Just "Offa".
+- Example: "Been having trouble finding good off-market leads lately. I use Offa for the MLS automation side but still looking for better ways to source creative finance deals. What's working for you guys?"
 
 Return ONLY valid JSON: {{"title": "...", "body": "..."}}"""
 
