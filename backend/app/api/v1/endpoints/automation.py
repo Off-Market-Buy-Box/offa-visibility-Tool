@@ -12,31 +12,60 @@ router = APIRouter()
 
 @router.get("/status")
 async def get_status(db: AsyncSession = Depends(get_db)):
+    from app.models.reddit_mention import RedditMention
+    from app.models.linkedin_post import LinkedInPost
+    from app.models.twitter_post import TwitterPost
+    from app.models.facebook_post import FacebookPost
+
     status = automation.get_status()
-    # Get accurate counts from DB
-    for p in ["reddit", "linkedin", "twitter", "facebook"]:
-        # Scanned count
-        scan_result = await db.execute(
-            select(func.coalesce(func.sum(AutomationLog.posts_found), 0))
-            .where(AutomationLog.platform == p)
-            .where(AutomationLog.action == "scan")
-        )
-        status["platforms"][p]["total_scanned"] = scan_result.scalar() or 0
 
-        # Commented count
-        comment_result = await db.execute(
-            select(func.coalesce(func.sum(AutomationLog.posts_commented), 0))
-            .where(AutomationLog.platform == p)
-            .where(AutomationLog.action == "comment")
-        )
-        status["platforms"][p]["total_commented"] = comment_result.scalar() or 0
+    model_map = {
+        "reddit": RedditMention,
+        "linkedin": LinkedInPost,
+        "twitter": TwitterPost,
+        "facebook": FacebookPost,
+    }
 
-        # Error count
+    for p, Model in model_map.items():
+        # Scanned = total rows in the table
+        total = await db.execute(select(func.count(Model.id)))
+        status["platforms"][p]["total_scanned"] = total.scalar() or 0
+
+        # Commented = rows where agent_posted is True
+        commented = await db.execute(
+            select(func.count(Model.id)).where(Model.agent_posted == True)
+        )
+        status["platforms"][p]["total_commented"] = commented.scalar() or 0
+
+        # Errors from automation logs
         err_result = await db.execute(
             select(func.coalesce(func.sum(AutomationLog.errors), 0))
             .where(AutomationLog.platform == p)
         )
         status["platforms"][p]["errors"] = err_result.scalar() or 0
+
+        # Last scan time from the most recent scan log
+        last_scan = await db.execute(
+            select(AutomationLog.created_at)
+            .where(AutomationLog.platform == p)
+            .where(AutomationLog.action == "scan")
+            .order_by(desc(AutomationLog.created_at))
+            .limit(1)
+        )
+        row = last_scan.scalar()
+        if row:
+            status["platforms"][p]["last_scan"] = row.isoformat()
+
+        # Last comment time from the actual data
+        last_comment = await db.execute(
+            select(Model.agent_posted_at)
+            .where(Model.agent_posted == True)
+            .order_by(desc(Model.agent_posted_at))
+            .limit(1)
+        )
+        row = last_comment.scalar()
+        if row:
+            status["platforms"][p]["last_comment"] = row.isoformat()
 
     return status
 

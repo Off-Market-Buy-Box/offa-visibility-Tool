@@ -47,6 +47,11 @@ class RedditService:
             "homebuying",
             "HomeImprovement",
         ]
+
+        # Rotation index — tracks which batch of subreddits to scan next
+        self._subreddit_offset = 0
+        # How many subreddits to scan per cycle (keeps us under Reddit rate limits)
+        self.subreddits_per_cycle = 5
     
     async def search_reddit_serp(self, query: str, subreddit: str = None, num: int = 50) -> List[Dict]:
         """Search Reddit via SerpAPI Google search — no rate limits"""
@@ -285,7 +290,8 @@ class RedditService:
         keywords: List[str] = None,
         limit_per_subreddit: int = 100
     ) -> Dict:
-        """Monitor real estate subreddits using Reddit search API + AI relevance filtering"""
+        """Monitor real estate subreddits using Reddit search API + AI relevance filtering.
+        Scans a rotating batch of subreddits per cycle to stay under rate limits."""
         
         # Search queries focused on off-market / wholesale / property deals
         search_queries = [
@@ -313,8 +319,19 @@ class RedditService:
             "ai_filtered_out": 0,
         }
 
-        # Search across real estate subreddits — Reddit API only (has time filters, no old posts)
-        for subreddit in self.real_estate_subreddits:
+        # Pick the next batch of subreddits to scan (rotating window)
+        total_subs = len(self.real_estate_subreddits)
+        start = self._subreddit_offset % total_subs
+        batch = []
+        for i in range(self.subreddits_per_cycle):
+            batch.append(self.real_estate_subreddits[(start + i) % total_subs])
+        # Advance offset for next cycle
+        self._subreddit_offset = (start + self.subreddits_per_cycle) % total_subs
+
+        print(f"📋 Scanning {len(batch)}/{total_subs} subreddits this cycle: {', '.join(f'r/{s}' for s in batch)}")
+
+        # Search across the batch
+        for subreddit in batch:
             print(f"🔍 Searching r/{subreddit}...")
             
             for query in search_queries:
