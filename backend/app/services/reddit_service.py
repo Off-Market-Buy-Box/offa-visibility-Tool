@@ -109,66 +109,81 @@ class RedditService:
         limit: int = 100,
         time_filter: str = "month",
     ) -> List[Dict]:
-        """Search Reddit using the search API with pagination for more results"""
+        """Search Reddit using the search API with retry on 429 rate limits"""
         results = []
         fetched = 0
         after = None
-        # Reddit caps per-request at 100
         per_page = min(limit, 100)
 
         async with httpx.AsyncClient(headers=self.headers, timeout=30.0, follow_redirects=True) as client:
-            try:
-                while fetched < limit:
-                    if subreddit:
-                        url = f"{self.base_url}/r/{subreddit}/search.json"
-                        params = {"q": query, "restrict_sr": "on", "sort": sort, "limit": per_page, "t": time_filter}
-                    else:
-                        url = f"{self.base_url}/search.json"
-                        params = {"q": query, "sort": sort, "limit": per_page, "t": time_filter}
+            while fetched < limit:
+                if subreddit:
+                    url = f"{self.base_url}/r/{subreddit}/search.json"
+                    params = {"q": query, "restrict_sr": "on", "sort": sort, "limit": per_page, "t": time_filter}
+                else:
+                    url = f"{self.base_url}/search.json"
+                    params = {"q": query, "sort": sort, "limit": per_page, "t": time_filter}
 
-                    if after:
-                        params["after"] = after
+                if after:
+                    params["after"] = after
 
-                    response = await client.get(url, params=params)
-                    response.raise_for_status()
-                    data = response.json()
-                    posts = data.get("data", {}).get("children", [])
-
-                    if not posts:
+                # Retry up to 3 times on 429
+                for attempt in range(3):
+                    try:
+                        response = await client.get(url, params=params)
+                        if response.status_code == 429:
+                            # Rate limited — wait and retry
+                            retry_after = int(response.headers.get("Retry-After", 60))
+                            wait_time = min(retry_after, 120)
+                            print(f"⏳ Reddit rate limited (429). Waiting {wait_time}s before retry...")
+                            await asyncio.sleep(wait_time)
+                            continue
+                        response.raise_for_status()
                         break
+                    except httpx.HTTPStatusError as e:
+                        if e.response.status_code == 429 and attempt < 2:
+                            print(f"⏳ Reddit 429 — waiting 60s (attempt {attempt + 1}/3)")
+                            await asyncio.sleep(60)
+                            continue
+                        raise
+                else:
+                    # All retries failed
+                    print(f"❌ Reddit rate limit persists after 3 retries for '{query}'")
+                    return results
 
-                    for post in posts:
-                        pd = post.get("data", {})
-                        title = pd.get("title", "")
-                        content = pd.get("selftext", "")[:2000]
-                        combined = (title + " " + content).lower()
+                data = response.json()
+                posts = data.get("data", {}).get("children", [])
 
-                        is_relevant = self._check_relevance(combined)
+                if not posts:
+                    break
 
-                        results.append({
-                            "post_id": pd.get("id"),
-                            "subreddit": pd.get("subreddit", ""),
-                            "title": title,
-                            "author": pd.get("author", "[deleted]"),
-                            "content": content,
-                            "url": f"{self.base_url}{pd.get('permalink', '')}",
-                            "score": pd.get("score", 0),
-                            "num_comments": pd.get("num_comments", 0),
-                            "keywords_matched": query,
-                            "posted_at": datetime.fromtimestamp(pd.get("created_utc", 0)),
-                            "is_relevant": is_relevant,
-                        })
+                for post in posts:
+                    pd = post.get("data", {})
+                    title = pd.get("title", "")
+                    content = pd.get("selftext", "")[:2000]
+                    combined = (title + " " + content).lower()
 
-                    fetched += len(posts)
-                    after = data.get("data", {}).get("after")
-                    if not after:
-                        break
+                    results.append({
+                        "post_id": pd.get("id"),
+                        "subreddit": pd.get("subreddit", ""),
+                        "title": title,
+                        "author": pd.get("author", "[deleted]"),
+                        "content": content,
+                        "url": f"{self.base_url}{pd.get('permalink', '')}",
+                        "score": pd.get("score", 0),
+                        "num_comments": pd.get("num_comments", 0),
+                        "keywords_matched": query,
+                        "posted_at": datetime.fromtimestamp(pd.get("created_utc", 0)),
+                        "is_relevant": self._check_relevance(combined),
+                    })
 
-                    # Be polite to Reddit's rate limit
-                    await asyncio.sleep(1)
+                fetched += len(posts)
+                after = data.get("data", {}).get("after")
+                if not after:
+                    break
 
-            except Exception as e:
-                print(f"❌ Error searching Reddit: {e}")
+                # Wait 3 seconds between pages to stay under rate limit (~10 req/min without auth)
+                await asyncio.sleep(3)
 
         return results
 
@@ -298,17 +313,28 @@ class RedditService:
             "ai_filtered_out": 0,
         }
 
-        # Search across real estate subreddits using SerpAPI (no rate limits)
+        # Search across real estate subreddits — Reddit API primary, SerpAPI fallback
         for subreddit in self.real_estate_subreddits:
             print(f"🔍 Searching r/{subreddit}...")
             
             for query in search_queries:
-                # Use SerpAPI (Google) — no Reddit rate limits
-                results = await self.search_reddit_serp(query, subreddit=subreddit, num=50)
+                # Try Reddit API first
+                try:
+                    results = await self.search_reddit(
+                        query, subreddit=subreddit, sort="relevance",
+                        limit=limit_per_subreddit, time_filter="month",
+                    )
+                except Exception as e:
+                    # Fallback to SerpAPI on any Reddit API error
+                    print(f"  ⚠️ Reddit API failed for '{query}', trying SerpAPI: {e}")
+                    results = await self.search_reddit_serp(query, subreddit=subreddit, num=50)
                 
                 if results:
                     all_mentions.extend(results)
                     print(f"  ✅ '{query}': {len(results)} results")
+
+                # Wait between queries to avoid rate limits
+                await asyncio.sleep(2)
             
             stats["subreddits_checked"] += 1
         
