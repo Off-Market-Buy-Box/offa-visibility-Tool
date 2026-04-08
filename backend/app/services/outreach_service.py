@@ -127,10 +127,12 @@ class OutreachService:
                         db.add(post)
                         await db.flush()
 
-                        self._status["current_action"] = f"posting to {target.name}"
-                        print(f"📤 Posting to {target.name}: {title}")
-
-                        await poster.create_post(subreddit, title, body)
+                        self._status["current_action"] = f"waiting for browser lock..."
+                        from app.services.browser_lock import reddit_browser_lock
+                        async with reddit_browser_lock:
+                            self._status["current_action"] = f"posting to {target.name}"
+                            print(f"📤 Posting to {target.name}: {title}")
+                            await poster.create_post(subreddit, title, body)
 
                         post.status = "posted"
                         post.posted_at = datetime.utcnow()

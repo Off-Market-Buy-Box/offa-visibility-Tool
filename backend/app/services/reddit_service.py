@@ -313,21 +313,19 @@ class RedditService:
             "ai_filtered_out": 0,
         }
 
-        # Search across real estate subreddits — Reddit API primary, SerpAPI fallback
+        # Search across real estate subreddits — Reddit API only (has time filters, no old posts)
         for subreddit in self.real_estate_subreddits:
             print(f"🔍 Searching r/{subreddit}...")
             
             for query in search_queries:
-                # Try Reddit API first
                 try:
                     results = await self.search_reddit(
-                        query, subreddit=subreddit, sort="relevance",
-                        limit=limit_per_subreddit, time_filter="month",
+                        query, subreddit=subreddit, sort="new",
+                        limit=limit_per_subreddit, time_filter="week",
                     )
                 except Exception as e:
-                    # Fallback to SerpAPI on any Reddit API error
-                    print(f"  ⚠️ Reddit API failed for '{query}', trying SerpAPI: {e}")
-                    results = await self.search_reddit_serp(query, subreddit=subreddit, num=50)
+                    print(f"  ❌ Error for '{query}': {e}")
+                    results = []
                 
                 if results:
                     all_mentions.extend(results)
@@ -370,10 +368,17 @@ class RedditService:
         return stats
     
     async def save_mentions(self, db: AsyncSession, mentions: List[Dict]) -> int:
-        """Save Reddit mentions to database"""
+        """Save Reddit mentions to database — skips posts older than 30 days"""
         saved_count = 0
+        from datetime import timedelta
+        cutoff = datetime.utcnow() - timedelta(days=30)
         
         for mention_data in mentions:
+            # Skip old/archived posts
+            posted_at = mention_data.get("posted_at")
+            if posted_at and isinstance(posted_at, datetime) and posted_at < cutoff:
+                continue
+
             result = await db.execute(
                 select(RedditMention).where(RedditMention.post_id == mention_data["post_id"])
             )

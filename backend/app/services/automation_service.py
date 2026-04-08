@@ -197,6 +197,11 @@ class AutomationService:
             return {"error": str(e)}
 
     async def _comment(self, platform: str) -> Dict:
+        from app.services.browser_lock import reddit_browser_lock
+        async with reddit_browser_lock:
+            return await self._comment_inner(platform)
+
+    async def _comment_inner(self, platform: str) -> Dict:
         try:
             async with AsyncSessionLocal() as db:
                 max_posts = self._status["max_posts_per_run"]
