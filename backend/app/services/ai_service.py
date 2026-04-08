@@ -750,7 +750,7 @@ Write ONLY the post text, nothing else."""
 Return a JSON object with "title" and "body".
 
 RULES:
-- Title: 5-10 words, genuine question about real estate. Do NOT mention Offa in title.{past_context}
+- Title: Must be at least 60 characters long. Genuine question about real estate. Do NOT mention Offa in title.{past_context}
 - Body: 2-3 sentences MAX. Ask a real question about deals/investing. Mention "Offa" once casually as a tool you use — no URLs, no links, no offa.ai, no offa.com. Just "Offa".
 - Example: "Been having trouble finding good off-market leads lately. I use Offa for the MLS automation side but still looking for better ways to source creative finance deals. What's working for you guys?"
 

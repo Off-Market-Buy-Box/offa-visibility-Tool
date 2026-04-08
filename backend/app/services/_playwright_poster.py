@@ -1015,50 +1015,41 @@ def do_create_post(pw, username, password, subreddit, title, body):
         try:
             # Click "Add flair and tags" button
             flair_opened = False
-            for sel in [
-                'button:has-text("Add flair")',
-                'button:has-text("flair")',
-                ':text("Add flair and tags")',
-                'button:has-text("Add tags")',
-            ]:
-                try:
-                    el = page.locator(sel).first
-                    if el.count() > 0 and el.is_visible():
-                        el.click()
-                        page.wait_for_timeout(2000)
-                        flair_opened = True
-                        print("STEP:flair_dialog_opened", flush=True)
-                        break
-                except Exception:
-                    continue
+            flair_btn = page.locator('button:has-text("flair"), button:has-text("Add fl"), button:has-text("Add tags")').first
+            if flair_btn.count() > 0 and flair_btn.is_visible():
+                flair_btn.click()
+                page.wait_for_timeout(2500)
+                flair_opened = True
+                print("STEP:flair_dialog_opened", flush=True)
 
             if flair_opened:
-                # Click the first non-"No flair" radio option using JS
+                # Click the second radio button (first is "No flair", second is the first real flair)
                 picked = page.evaluate("""
                     () => {
-                        // Find the flair dialog
-                        const labels = document.querySelectorAll('label, [role="radio"], [role="option"]');
-                        for (const label of labels) {
-                            const text = label.textContent.trim();
-                            // Skip non-flair items
-                            if (!text || text === 'No flair' || text === 'Search'
-                                || text.includes('NSFW') || text.includes('Spoiler')
-                                || text.includes('Brand') || text.includes('Cancel')
-                                || text.includes('Add') || text.includes('Tags')
-                                || text.includes('View all') || text.length > 40) continue;
-                            // Click the radio/label
-                            const radio = label.querySelector('input[type="radio"]');
-                            if (radio) { radio.click(); return text; }
-                            label.click();
+                        // Strategy 1: Find all radio inputs and click the second one (skip "No flair")
+                        const radios = document.querySelectorAll('input[type="radio"]');
+                        if (radios.length >= 2) {
+                            radios[1].click();
+                            radios[1].dispatchEvent(new Event('change', { bubbles: true }));
+                            const parent = radios[1].closest('label') || radios[1].parentElement;
+                            return parent ? parent.textContent.trim() : 'radio[1]';
+                        }
+                        // Strategy 2: Find circles (unchecked radio-like elements) 
+                        const circles = document.querySelectorAll('[role="radio"]');
+                        for (let i = 0; i < circles.length; i++) {
+                            const text = circles[i].textContent.trim();
+                            if (text === 'No flair' || !text) continue;
+                            circles[i].click();
                             return text;
                         }
-                        // Fallback: click any circle/radio that's not selected
-                        const radios = document.querySelectorAll('input[type="radio"]:not(:checked)');
-                        for (const r of radios) {
-                            const parent = r.closest('label') || r.parentElement;
-                            const text = (parent ? parent.textContent : '').trim();
-                            if (text && text !== 'No flair' && !text.includes('NSFW')) {
-                                r.click();
+                        // Strategy 3: Click any non-first list item in the dialog
+                        const dialog = document.querySelector('[role="dialog"]') || document.body;
+                        const items = dialog.querySelectorAll('li, [data-flair-id]');
+                        for (let i = 0; i < items.length; i++) {
+                            const text = items[i].textContent.trim();
+                            if (text === 'No flair' || text.includes('NSFW') || text.includes('Spoiler') || text.includes('Brand')) continue;
+                            if (text.length > 0 && text.length < 50) {
+                                items[i].click();
                                 return text;
                             }
                         }
@@ -1068,31 +1059,34 @@ def do_create_post(pw, username, password, subreddit, title, body):
 
                 if picked:
                     print(f"STEP:flair_picked:{picked}", flush=True)
-                    page.wait_for_timeout(500)
+                    page.wait_for_timeout(1000)
+
                     # Click the blue "Add" button
-                    for sel in ['button:has-text("Add")', 'button:has-text("Apply")', 'button:has-text("Done")']:
-                        try:
-                            btn = page.locator(sel).first
-                            if btn.count() > 0 and btn.is_visible():
-                                btn.click()
-                                page.wait_for_timeout(1500)
-                                print("STEP:flair_added", flush=True)
-                                break
-                        except Exception:
-                            continue
+                    add_clicked = False
+                    add_btn = page.locator('button:has-text("Add")').last
+                    if add_btn.count() > 0 and add_btn.is_visible():
+                        add_btn.click()
+                        add_clicked = True
+                        page.wait_for_timeout(2000)
+                        print("STEP:flair_added", flush=True)
+
+                    if not add_clicked:
+                        # Try pressing Enter as fallback
+                        page.keyboard.press("Enter")
+                        page.wait_for_timeout(1500)
                 else:
                     print("STEP:no_flair_to_pick", flush=True)
-                    # Close dialog
-                    try:
-                        page.locator('button:has-text("Cancel")').first.click()
-                        page.wait_for_timeout(500)
-                    except Exception:
-                        page.keyboard.press("Escape")
-                        page.wait_for_timeout(500)
+                    page.keyboard.press("Escape")
+                    page.wait_for_timeout(500)
             else:
                 print("STEP:no_flair_button_found", flush=True)
         except Exception as e:
             print(f"STEP:flair_error:{e}", flush=True)
+            try:
+                page.keyboard.press("Escape")
+                page.wait_for_timeout(500)
+            except Exception:
+                pass
 
         # === FILL BODY ===
         # The body editor is a Lexical rich-text editor — same as comment box
