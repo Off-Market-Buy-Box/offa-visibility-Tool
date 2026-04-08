@@ -43,6 +43,33 @@ async def create_tables():
         await conn.run_sync(Base.metadata.create_all)
 
 
+@app.on_event("startup")
+async def cleanup_old_posts():
+    """Remove old uncommented posts (>30 days) on every server start"""
+    try:
+        from datetime import datetime, timedelta
+        from sqlalchemy import delete, and_
+        from app.core.database import AsyncSessionLocal
+        from app.models.reddit_mention import RedditMention
+
+        cutoff = datetime.utcnow() - timedelta(days=30)
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                delete(RedditMention).where(
+                    and_(
+                        RedditMention.agent_posted == False,
+                        RedditMention.posted_at < cutoff,
+                    )
+                )
+            )
+            deleted = result.rowcount
+            await db.commit()
+            if deleted > 0:
+                print(f"🧹 Startup cleanup: removed {deleted} old uncommented Reddit posts")
+    except Exception as e:
+        print(f"⚠️ Startup cleanup error (non-fatal): {e}")
+
+
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
