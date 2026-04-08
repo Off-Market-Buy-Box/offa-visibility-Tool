@@ -1,3 +1,4 @@
+import asyncio
 import httpx
 from typing import List, Dict, Optional
 from datetime import datetime
@@ -23,6 +24,24 @@ class RedditService:
             "Flipping",
             "realestate",
             "HousingMarket",
+            "RealEstateAdvice",
+            "Landlord",
+            "PropertyManagement",
+            "REBubble",
+            "homeowners",
+            "RealEstateCanada",
+            "RealEstateTechnology",
+            "realestateinvestingclub",
+            "Mortgages",
+            "personalfinance",
+            "financialindependence",
+            "fatFIRE",
+            "leanfire",
+            "investing",
+            "passiveincome",
+            "rentalincome",
+            "homebuying",
+            "HomeImprovement",
         ]
     
     async def search_reddit(
@@ -30,51 +49,70 @@ class RedditService:
         query: str,
         subreddit: str = None,
         sort: str = "relevance",
-        limit: int = 25
+        limit: int = 100,
+        time_filter: str = "month",
     ) -> List[Dict]:
-        """Search Reddit using the search API - much better for finding relevant posts"""
+        """Search Reddit using the search API with pagination for more results"""
         results = []
-        
+        fetched = 0
+        after = None
+        # Reddit caps per-request at 100
+        per_page = min(limit, 100)
+
         async with httpx.AsyncClient(headers=self.headers, timeout=30.0, follow_redirects=True) as client:
             try:
-                if subreddit:
-                    url = f"{self.base_url}/r/{subreddit}/search.json"
-                    params = {"q": query, "restrict_sr": "on", "sort": sort, "limit": limit, "t": "month"}
-                else:
-                    url = f"{self.base_url}/search.json"
-                    params = {"q": query, "sort": sort, "limit": limit, "t": "month"}
-                
-                response = await client.get(url, params=params)
-                response.raise_for_status()
-                data = response.json()
-                posts = data.get("data", {}).get("children", [])
+                while fetched < limit:
+                    if subreddit:
+                        url = f"{self.base_url}/r/{subreddit}/search.json"
+                        params = {"q": query, "restrict_sr": "on", "sort": sort, "limit": per_page, "t": time_filter}
+                    else:
+                        url = f"{self.base_url}/search.json"
+                        params = {"q": query, "sort": sort, "limit": per_page, "t": time_filter}
 
-                for post in posts:
-                    pd = post.get("data", {})
-                    title = pd.get("title", "")
-                    content = pd.get("selftext", "")[:2000]
-                    combined = (title + " " + content).lower()
+                    if after:
+                        params["after"] = after
 
-                    # Filter: must be about real estate / property / investing
-                    is_relevant = self._check_relevance(combined)
+                    response = await client.get(url, params=params)
+                    response.raise_for_status()
+                    data = response.json()
+                    posts = data.get("data", {}).get("children", [])
 
-                    results.append({
-                        "post_id": pd.get("id"),
-                        "subreddit": pd.get("subreddit", ""),
-                        "title": title,
-                        "author": pd.get("author", "[deleted]"),
-                        "content": content,
-                        "url": f"{self.base_url}{pd.get('permalink', '')}",
-                        "score": pd.get("score", 0),
-                        "num_comments": pd.get("num_comments", 0),
-                        "keywords_matched": query,
-                        "posted_at": datetime.fromtimestamp(pd.get("created_utc", 0)),
-                        "is_relevant": is_relevant,
-                    })
-                    
+                    if not posts:
+                        break
+
+                    for post in posts:
+                        pd = post.get("data", {})
+                        title = pd.get("title", "")
+                        content = pd.get("selftext", "")[:2000]
+                        combined = (title + " " + content).lower()
+
+                        is_relevant = self._check_relevance(combined)
+
+                        results.append({
+                            "post_id": pd.get("id"),
+                            "subreddit": pd.get("subreddit", ""),
+                            "title": title,
+                            "author": pd.get("author", "[deleted]"),
+                            "content": content,
+                            "url": f"{self.base_url}{pd.get('permalink', '')}",
+                            "score": pd.get("score", 0),
+                            "num_comments": pd.get("num_comments", 0),
+                            "keywords_matched": query,
+                            "posted_at": datetime.fromtimestamp(pd.get("created_utc", 0)),
+                            "is_relevant": is_relevant,
+                        })
+
+                    fetched += len(posts)
+                    after = data.get("data", {}).get("after")
+                    if not after:
+                        break
+
+                    # Be polite to Reddit's rate limit
+                    await asyncio.sleep(1)
+
             except Exception as e:
                 print(f"❌ Error searching Reddit: {e}")
-        
+
         return results
 
     async def get_post_comments(self, post_url: str, limit: int = 500) -> List[Dict]:
@@ -149,7 +187,7 @@ class RedditService:
         self, 
         subreddit: str, 
         keywords: List[str],
-        limit: int = 25
+        limit: int = 100
     ) -> List[Dict]:
         """Search a subreddit for keyword mentions using search API"""
         all_results = []
@@ -173,7 +211,7 @@ class RedditService:
         self,
         db: AsyncSession,
         keywords: List[str] = None,
-        limit_per_subreddit: int = 25
+        limit_per_subreddit: int = 100
     ) -> Dict:
         """Monitor real estate subreddits using Reddit search API + AI relevance filtering"""
         
@@ -202,21 +240,31 @@ class RedditService:
             "offa_mentions": 0,
             "ai_filtered_out": 0,
         }
-        
+
+        # Search with multiple sort orders for broader coverage
+        sort_orders = ["relevance", "new", "hot"]
+
         # Search across real estate subreddits
         for subreddit in self.real_estate_subreddits:
             print(f"🔍 Searching r/{subreddit}...")
             
             for query in search_queries:
-                results = await self.search_reddit(query, subreddit=subreddit, limit=limit_per_subreddit)
-                
-                if results:
-                    all_mentions.extend(results)
+                for sort in sort_orders:
+                    results = await self.search_reddit(
+                        query,
+                        subreddit=subreddit,
+                        sort=sort,
+                        limit=limit_per_subreddit,
+                        time_filter="month",
+                    )
                     
-                    offa_count = sum(1 for m in results if "offa" in (m.get("content", "") + m.get("title", "")).lower())
-                    stats["offa_mentions"] += offa_count
-                    
-                    print(f"  ✅ '{query}': {len(results)} results")
+                    if results:
+                        all_mentions.extend(results)
+                        
+                        offa_count = sum(1 for m in results if "offa" in (m.get("content", "") + m.get("title", "")).lower())
+                        stats["offa_mentions"] += offa_count
+                        
+                        print(f"  ✅ '{query}' ({sort}): {len(results)} results")
             
             stats["subreddits_checked"] += 1
         

@@ -6,6 +6,9 @@ import json
 import os
 import sys
 import traceback
+import signal
+import glob
+import subprocess
 
 PROFILE_DIR = os.path.join(os.path.expanduser("~"), ".offa_facebook_browser")
 
@@ -49,9 +52,32 @@ def wait_for_login(page, timeout_seconds=180):
     return False
 
 
-def launch_browser(pw):
+def _kill_stale_chromium(profile_dir):
+    """Kill any Chromium processes still holding the profile lock."""
+    try:
+        result = subprocess.run(
+            ["pgrep", "-f", profile_dir],
+            capture_output=True, text=True, timeout=5,
+        )
+        for pid_str in result.stdout.strip().split("\n"):
+            pid_str = pid_str.strip()
+            if pid_str and pid_str.isdigit():
+                pid = int(pid_str)
+                if pid != os.getpid():
+                    os.kill(pid, signal.SIGTERM)
+        time.sleep(1)
+    except Exception:
+        pass
+    for name in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
+        try:
+            os.remove(os.path.join(profile_dir, name))
+        except OSError:
+            pass
+
+
+def _do_launch_facebook(pw, profile_dir):
     return pw.chromium.launch_persistent_context(
-        get_profile_dir(),
+        profile_dir,
         headless=False,
         args=[
             "--disable-blink-features=AutomationControlled",
@@ -60,6 +86,17 @@ def launch_browser(pw):
         viewport={"width": 1280, "height": 900},
         user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     )
+
+
+def launch_browser(pw):
+    profile_dir = get_profile_dir()
+    try:
+        return _do_launch_facebook(pw, profile_dir)
+    except Exception as first_err:
+        if "Target" in str(first_err) or "existing browser" in str(first_err).lower():
+            _kill_stale_chromium(profile_dir)
+            return _do_launch_facebook(pw, profile_dir)
+        raise
 
 
 def do_login_only(pw, email, password):

@@ -11,6 +11,9 @@ import json
 import os
 import time
 import traceback
+import signal
+import glob
+import subprocess
 
 
 def get_profile_dir():
@@ -47,9 +50,30 @@ def wait_for_login(page, timeout_seconds=180):
     return False
 
 
-def launch_browser(pw):
-    profile_dir = get_profile_dir()
-    os.makedirs(profile_dir, exist_ok=True)
+def _kill_stale_chromium(profile_dir):
+    """Kill any Chromium processes still holding the profile lock."""
+    try:
+        result = subprocess.run(
+            ["pgrep", "-f", profile_dir],
+            capture_output=True, text=True, timeout=5,
+        )
+        for pid_str in result.stdout.strip().split("\n"):
+            pid_str = pid_str.strip()
+            if pid_str and pid_str.isdigit():
+                pid = int(pid_str)
+                if pid != os.getpid():
+                    os.kill(pid, signal.SIGTERM)
+        time.sleep(1)
+    except Exception:
+        pass
+    for name in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
+        try:
+            os.remove(os.path.join(profile_dir, name))
+        except OSError:
+            pass
+
+
+def _do_launch_twitter(pw, profile_dir):
     return pw.chromium.launch_persistent_context(
         user_data_dir=profile_dir,
         headless=False,
@@ -65,6 +89,18 @@ def launch_browser(pw):
         viewport={"width": 1280, "height": 900},
         ignore_default_args=["--enable-automation"],
     )
+
+
+def launch_browser(pw):
+    profile_dir = get_profile_dir()
+    os.makedirs(profile_dir, exist_ok=True)
+    try:
+        return _do_launch_twitter(pw, profile_dir)
+    except Exception as first_err:
+        if "Target" in str(first_err) or "existing browser" in str(first_err).lower():
+            _kill_stale_chromium(profile_dir)
+            return _do_launch_twitter(pw, profile_dir)
+        raise
 
 
 def do_login_only(pw, email, password):

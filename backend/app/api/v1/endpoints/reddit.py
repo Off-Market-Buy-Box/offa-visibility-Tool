@@ -36,12 +36,13 @@ async def monitor_subreddit(
 @router.post("/monitor-real-estate")
 async def monitor_real_estate(
     keywords: Optional[List[str]] = Query(None),
+    limit: int = Query(100, ge=1, le=500),
     db: AsyncSession = Depends(get_db)
 ):
     """Monitor all real estate subreddits for offa.com and related keywords"""
     reddit_service = RedditService()
     
-    stats = await reddit_service.monitor_real_estate_mentions(db, keywords)
+    stats = await reddit_service.monitor_real_estate_mentions(db, keywords, limit_per_subreddit=limit)
     
     return {
         "message": "Real estate monitoring completed",
