@@ -129,10 +129,22 @@ class OutreachService:
 
                         self._status["current_action"] = f"waiting for browser lock..."
                         from app.services.browser_lock import reddit_browser_lock
-                        async with reddit_browser_lock:
+                        acquired = await reddit_browser_lock.acquire(timeout=300)
+                        if not acquired:
+                            print(f"⚠️ Skipping {target.name} — browser lock timeout")
+                            post.status = "error"
+                            post.error = "Browser lock timeout — will retry"
+                            await db.commit()
+                            continue
+                        try:
                             self._status["current_action"] = f"posting to {target.name}"
                             print(f"📤 Posting to {target.name}: {title}")
-                            await poster.create_post(subreddit, title, body)
+                            await asyncio.wait_for(
+                                poster.create_post(subreddit, title, body),
+                                timeout=300,
+                            )
+                        finally:
+                            reddit_browser_lock.release()
 
                         post.status = "posted"
                         post.posted_at = datetime.utcnow()
@@ -151,9 +163,8 @@ class OutreachService:
                         except Exception:
                             pass
 
-                        # Auto-disable this subreddit so we don't retry it
-                        target.enabled = False
-                        print(f"🗑️ Disabled {target.name} — error: {error_msg[:100]}")
+                        # Don't disable — just skip and retry next cycle
+                        print(f"⏭️ Will retry {target.name} next cycle")
 
                         if raise_errors:
                             await db.commit()

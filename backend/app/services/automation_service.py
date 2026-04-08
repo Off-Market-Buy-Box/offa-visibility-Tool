@@ -96,25 +96,30 @@ class AutomationService:
 
                 self._status["current_platform"] = platform
 
-                # Only scan if no pending posts
-                has_pending = await self._has_pending_posts(platform)
-                if not has_pending:
-                    self._status["current_action"] = "scanning"
-                    scan_result = await self._scan(platform)
-                    if not self._running:
-                        break
-
-                    # Re-check after scan — if still no pending posts, skip commenting
-                    # This prevents the loop from endlessly scanning the same results
+                try:
+                    # Only scan if no pending posts
                     has_pending = await self._has_pending_posts(platform)
                     if not has_pending:
-                        continue
+                        self._status["current_action"] = "scanning"
+                        scan_result = await self._scan(platform)
+                        if not self._running:
+                            break
 
-                # Comment on pending posts
-                self._status["current_action"] = "commenting"
-                result = await self._comment(platform)
-                if result.get("comments_posted", 0) > 0:
-                    had_work = True
+                        # Re-check after scan
+                        has_pending = await self._has_pending_posts(platform)
+                        if not has_pending:
+                            continue
+
+                    # Comment on pending posts
+                    self._status["current_action"] = "commenting"
+                    result = await self._comment(platform)
+                    if result.get("comments_posted", 0) > 0:
+                        had_work = True
+
+                except Exception as e:
+                    # Never let one platform crash the whole loop
+                    print(f"❌ {platform} cycle error (continuing): {e}")
+                    self._status["platforms"][platform]["errors"] += 1
 
                 if not self._running:
                     break
@@ -140,6 +145,18 @@ class AutomationService:
             await asyncio.sleep(1)
 
     async def _scan(self, platform: str) -> Dict:
+        try:
+            return await asyncio.wait_for(self._scan_inner(platform), timeout=600)
+        except asyncio.TimeoutError:
+            self._status["platforms"][platform]["errors"] += 1
+            print(f"⏰ {platform} scan timed out after 10 minutes")
+            return {"error": f"{platform} scan timed out"}
+        except Exception as e:
+            self._status["platforms"][platform]["errors"] += 1
+            print(f"❌ {platform} scan error: {e}")
+            return {"error": str(e)}
+
+    async def _scan_inner(self, platform: str) -> Dict:
         try:
             async with AsyncSessionLocal() as db:
                 if platform == "reddit":
@@ -197,9 +214,35 @@ class AutomationService:
             return {"error": str(e)}
 
     async def _comment(self, platform: str) -> Dict:
-        from app.services.browser_lock import reddit_browser_lock
-        async with reddit_browser_lock:
-            return await self._comment_inner(platform)
+        if platform == "reddit":
+            from app.services.browser_lock import reddit_browser_lock
+            lock = reddit_browser_lock
+        else:
+            lock = None
+
+        if lock:
+            acquired = await lock.acquire(timeout=300)
+            if not acquired:
+                print(f"⚠️ Skipping {platform} commenting — could not acquire browser lock")
+                return {"error": "Browser lock timeout"}
+            try:
+                return await asyncio.wait_for(self._comment_inner(platform), timeout=600)
+            except asyncio.TimeoutError:
+                self._status["platforms"][platform]["errors"] += 1
+                print(f"⏰ {platform} commenting timed out after 10 minutes")
+                return {"error": f"{platform} commenting timed out"}
+            except Exception as e:
+                print(f"❌ {platform} commenting error: {e}")
+                return {"error": str(e)}
+            finally:
+                lock.release()
+        else:
+            try:
+                return await asyncio.wait_for(self._comment_inner(platform), timeout=600)
+            except asyncio.TimeoutError:
+                return {"error": f"{platform} commenting timed out"}
+            except Exception as e:
+                return {"error": str(e)}
 
     async def _comment_inner(self, platform: str) -> Dict:
         try:

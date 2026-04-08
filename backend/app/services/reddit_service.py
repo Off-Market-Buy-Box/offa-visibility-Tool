@@ -20,31 +20,42 @@ class RedditService:
         }
         
         self.real_estate_subreddits = [
+            # Core real estate investing
             "realestateinvesting",
             "RealEstate",
-            "FirstTimeHomeBuyer",
+            "realestate",
             "CommercialRealEstate",
             "WholesaleRealestate",
+            "wholesaling",
             "Flipping",
-            "realestate",
-            "HousingMarket",
-            "RealEstateAdvice",
+            "fixandflip",
+            # Buyers & homeowners
+            "FirstTimeHomeBuyer",
+            "homeowners",
+            "homebuying",
+            "REBubble",
+            # Landlords & property management
             "Landlord",
             "PropertyManagement",
-            "REBubble",
-            "homeowners",
-            "RealEstateCanada",
+            "rentalproperty",
+            "rentalincome",
+            # Advice & niche
+            "RealEstateAdvice",
             "RealEstateTechnology",
             "realestateinvestingclub",
+            "RealEstateCanada",
             "Mortgages",
+            # Finance & entrepreneurship
             "personalfinance",
             "financialindependence",
             "fatFIRE",
             "leanfire",
             "investing",
             "passiveincome",
-            "rentalincome",
-            "homebuying",
+            "Entrepreneur",
+            "smallbusiness",
+            "passive_income",
+            "Fire",
             "HomeImprovement",
         ]
 

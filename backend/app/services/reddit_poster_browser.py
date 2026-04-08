@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import signal
 import sys
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
@@ -9,9 +10,36 @@ from app.core.config import settings
 
 # Path to the standalone Playwright script
 _SCRIPT_PATH = os.path.join(os.path.dirname(__file__), "_playwright_poster.py")
+_PROFILE_DIR = os.path.join(os.path.dirname(__file__), ".reddit_browser_profile")
 
 # Dedicated thread pool — avoids any asyncio event loop involvement
 _executor = ThreadPoolExecutor(max_workers=2)
+
+
+def _cleanup_stale_browsers():
+    """Kill any leftover Chromium processes from previous runs."""
+    try:
+        result = subprocess.run(
+            ["pgrep", "-f", _PROFILE_DIR],
+            capture_output=True, text=True, timeout=5,
+        )
+        for pid_str in result.stdout.strip().split("\n"):
+            pid_str = pid_str.strip()
+            if pid_str and pid_str.isdigit():
+                pid = int(pid_str)
+                if pid != os.getpid():
+                    try:
+                        os.kill(pid, signal.SIGTERM)
+                    except ProcessLookupError:
+                        pass
+    except Exception:
+        pass
+    # Remove lock files
+    for name in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
+        try:
+            os.remove(os.path.join(_PROFILE_DIR, name))
+        except OSError:
+            pass
 
 
 def _run_poster_subprocess(python_exe: str, script_path: str, args_json: str) -> dict:
@@ -21,15 +49,33 @@ def _run_poster_subprocess(python_exe: str, script_path: str, args_json: str) ->
 def _run_poster_subprocess_with_timeout(python_exe: str, script_path: str, args_json: str, timeout: int = 180) -> dict:
     """
     Pure synchronous function — runs in a thread, zero asyncio involvement.
-    Uses subprocess.Popen with plain pipes.
+    Uses subprocess.Popen with plain pipes. Kills process on timeout.
     """
+    # Clean up any stale browser processes before launching
+    _cleanup_stale_browsers()
+
     proc = subprocess.Popen(
         [python_exe, script_path, args_json],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
 
-    stdout_bytes, stderr_bytes = proc.communicate(timeout=timeout)
+    try:
+        stdout_bytes, stderr_bytes = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        # Kill the hung process and all its children
+        proc.kill()
+        try:
+            proc.wait(timeout=5)
+        except Exception:
+            pass
+        # Also clean up any orphaned browser processes
+        _cleanup_stale_browsers()
+        try:
+            stdout_bytes, stderr_bytes = proc.communicate(timeout=5)
+        except Exception:
+            stdout_bytes, stderr_bytes = b"", b""
+        raise RuntimeError(f"Browser process timed out after {timeout}s and was killed")
 
     stdout = stdout_bytes.decode("utf-8", errors="replace").strip()
     stderr = stderr_bytes.decode("utf-8", errors="replace").strip()

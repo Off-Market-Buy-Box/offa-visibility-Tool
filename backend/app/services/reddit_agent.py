@@ -145,11 +145,13 @@ class RedditAgent:
             try:
                 batch_results = await poster.post_comments_batch(batch_posts, delay_seconds=self.delay)
             except Exception as e:
+                error_msg = str(e)
+                await emit({"type": "log", "emoji": "❌", "message": f"Browser batch error: {error_msg}"})
+                # Don't mark posts as permanently failed — they'll be retried next cycle
                 for thread, post_info, _ in batch_items:
                     post_info["status"] = "error"
-                    post_info["error"] = str(e)
-                    stats["errors"].append(f"Thread {thread.id}: {str(e)}")
-                    await emit({"type": "post_result", "index": 0, "post": post_info})
+                    post_info["error"] = error_msg
+                    stats["errors"].append(f"Thread {thread.id}: {error_msg}")
                     stats["posts"].append(post_info)
                 await emit({"type": "log", "emoji": "🏁", "message": f"Done! Generated: {stats['responses_generated']}, Posted: 0, Errors: {len(stats['errors'])}"})
                 return stats
@@ -169,9 +171,13 @@ class RedditAgent:
                     stats["errors"].append(f"Thread {thread.id}: {error_msg}")
                     post_info["status"] = "error"
                     post_info["error"] = error_msg
-                    # Remove from queue so we don't retry unreachable posts forever
-                    thread.is_relevant = False
-                    await emit({"type": "log", "emoji": "🗑️", "message": f"Removed from queue (can't comment): {error_msg}"})
+                    # Only permanently remove if the post itself is unreachable
+                    permanent_errors = ["locked", "archived", "deleted", "removed", "private", "banned"]
+                    if any(pe in error_msg.lower() for pe in permanent_errors):
+                        thread.is_relevant = False
+                        await emit({"type": "log", "emoji": "🗑️", "message": f"Removed from queue (permanent): {error_msg}"})
+                    else:
+                        await emit({"type": "log", "emoji": "⚠️", "message": f"Will retry: {error_msg}"})
                 await emit({"type": "post_result", "index": 0, "post": post_info})
                 stats["posts"].append(post_info)
             await db.commit()
@@ -196,10 +202,14 @@ class RedditAgent:
                     stats["errors"].append(f"Thread {thread.id}: {error_msg}")
                     post_info["status"] = "error"
                     post_info["error"] = error_msg
-                    # Remove from queue so we don't retry unreachable posts forever
-                    thread.is_relevant = False
+                    # Only permanently remove if the post itself is unreachable
+                    permanent_errors = ["locked", "archived", "deleted", "removed", "private", "banned"]
+                    if any(pe in error_msg.lower() for pe in permanent_errors):
+                        thread.is_relevant = False
+                        await emit({"type": "log", "emoji": "🗑️", "message": f"Removed from queue (permanent): {error_msg}"})
+                    else:
+                        await emit({"type": "log", "emoji": "⚠️", "message": f"Will retry: {error_msg}"})
                     await db.commit()
-                    await emit({"type": "log", "emoji": "🗑️", "message": f"Removed from queue (can't comment): {error_msg}"})
                 await emit({"type": "post_result", "index": i, "post": post_info})
                 stats["posts"].append(post_info)
                 if thread != batch_items[-1][0]:
