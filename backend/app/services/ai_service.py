@@ -749,10 +749,16 @@ Write ONLY the post text, nothing else."""
 
 Return a JSON object with "title" and "body".
 
-RULES:
-- Title: Must be at least 60 characters long. Genuine question about real estate. Do NOT mention Offa in title.{past_context}
-- Body: 2-3 sentences MAX. Ask a real question about deals/investing. Mention "Offa" once casually as a tool you use — no URLs, no links, no offa.ai, no offa.com. Just "Offa".
-- Example: "Been having trouble finding good off-market leads lately. I use Offa for the MLS automation side but still looking for better ways to source creative finance deals. What's working for you guys?"
+You are a real estate investor sharing a real experience or asking a genuine question. Make up a specific, believable mini-story or situation. Vary the format — sometimes it's a question, sometimes sharing a lesson learned, sometimes asking for advice on a specific deal.
+
+TITLE: At least 60 characters. A specific, interesting question or story hook relevant to r/{subreddit}. Do NOT mention Offa in the title.{past_context}
+
+BODY: One short paragraph, 2-4 sentences. Tell a quick story or describe a specific situation. If it fits naturally, mention Offa as something you use — but only if it makes sense in context. Sometimes don't mention it at all. No URLs, no links. Sound like a real person, not a template.
+
+Examples of good variety:
+- "Just lost a deal because the seller got a higher offer 2 hours before closing. I had the numbers right but moved too slow on the initial offer. For those of you doing volume, how do you speed up your offer process without cutting corners on due diligence?"
+- "Closed my first wholesale deal last month after 6 months of grinding. Used Offa to find the lead through MLS automation and ended up assigning it for 12k. Small win but it proved the model works. Anyone else remember their first deal?"
+- "My agent keeps sending me MLS listings that are already under contract by the time I see them. Thinking about switching to a more automated approach. What tools or systems are you using to get notified faster?"
 
 Return ONLY valid JSON: {{"title": "...", "body": "..."}}"""
 
