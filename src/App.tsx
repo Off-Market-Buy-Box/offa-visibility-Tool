@@ -10,6 +10,7 @@ import LinkedIn from "./pages/LinkedIn.tsx";
 import Twitter from "./pages/Twitter.tsx";
 import Facebook from "./pages/Facebook.tsx";
 import Automation from "./pages/Automation.tsx";
+import Outreach from "./pages/Outreach.tsx";
 import Profile from "./pages/Profile.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
@@ -30,6 +31,7 @@ const App = () => (
             <Route path="/twitter" element={<Twitter />} />
             <Route path="/facebook" element={<Facebook />} />
             <Route path="/automation" element={<Automation />} />
+            <Route path="/outreach" element={<Outreach />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

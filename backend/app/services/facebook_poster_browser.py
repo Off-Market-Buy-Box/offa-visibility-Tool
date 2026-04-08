@@ -108,6 +108,26 @@ class FacebookPosterBrowser:
         )
         return result.get("batch_results", [])
 
+    async def post_to_group(self, group_url: str, text: str) -> dict:
+        """Create a new post in a Facebook group"""
+        args_json = json.dumps({
+            "email": self.email,
+            "password": self.password,
+            "group_url": group_url,
+            "group_text": text,
+        })
+
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(
+            _executor,
+            _run_poster_subprocess_with_timeout,
+            sys.executable,
+            _SCRIPT_PATH,
+            args_json,
+            180,
+        )
+        return result
+
     async def close(self):
         pass
 

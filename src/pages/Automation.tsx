@@ -155,13 +155,6 @@ const Automation = () => {
                     <div><Label className="text-xs text-muted-foreground">Posts per run</Label><Input type="number" min={1} max={50} value={status.max_posts_per_run} onChange={(e) => handleSettingChange("max_posts_per_run", Number(e.target.value))} className="mt-1 h-8" /></div>
                     <div><Label className="text-xs text-muted-foreground">Delay between cycles (sec)</Label><Input type="number" min={5} max={3600} value={status.delay_between_cycles} onChange={(e) => handleSettingChange("delay_between_cycles", Number(e.target.value))} className="mt-1 h-8" /></div>
                 </div>
-                <div className="mt-3 pt-3 border-t border-border">
-                    <Button variant="destructive" size="sm" onClick={handleClearAll} disabled={clearing || status.running} className="gap-2 text-xs">
-                        {clearing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
-                        Clear All Data
-                    </Button>
-                    <p className="text-[10px] text-muted-foreground mt-1">Deletes all scanned posts, comments, logs, and stats.</p>
-                </div>
             </div>
 
             {/* Tabs + Filter */}

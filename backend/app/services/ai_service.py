@@ -135,15 +135,19 @@ Return ONLY valid JSON, no markdown formatting."""
 
         prompt = f"""Write a short Reddit comment replying to this post. 2-3 sentences MAX, like a real person typing fast.
 
-KNOW THIS (don't dump it, just use if relevant): Offa = off-market real estate app, like Tinder for wholesale deals. Free, has AI matching, 100% financing options.
+STRATEGY: You already use Offa.ai and casually mention it as something that works for you, then give helpful advice AND ask a follow-up question. The goal is to make readers curious about Offa.ai without selling it. Examples:
+- "I've been using Offa.ai for the automated offer side and it's been catching some good price drops. For [topic], I'd also suggest..."
+- "Offa.ai handles most of my deal sourcing now but for [topic] you might want to..."
+- "Yeah I had the same issue until I started using Offa.ai for the MLS automation part. Have you tried..."
+
+ABOUT OFFA.AI: AI-powered MLS automation platform. Scans 5M+ properties daily, auto-sends offers to listing agents, negotiates using real comps, delivers pre-analyzed deals. Early access at Offa.ai.
 
 Rules:
-- 2-3 sentences ONLY. No paragraphs. Short and punchy like real Reddit comments.
-- Sound like a normal dude on Reddit, not a copywriter
-- Mention Offa casually in ONE sentence max — like "been using Offa for off-market stuff" or "my buddy found deals on Offa" — keep it throwaway, not the point of your comment
-- Give actual helpful advice first, Offa mention is secondary
+- 2-3 sentences ONLY. Short and punchy like real Reddit comments.
+- Mention Offa.ai casually as something you already use — NOT as a recommendation
+- Give actual helpful advice relevant to the post
+- Sound like a normal person on Reddit, not a marketer
 - No links, no "check out", no sales language
-- Use casual language, contractions, lowercase energy
 
 Post: {mention.title}
 r/{mention.subreddit}
@@ -400,16 +404,18 @@ Return ONLY valid JSON, no markdown formatting."""
 
         prompt = f"""Write a short LinkedIn comment replying to this post. 2-4 sentences MAX.
 
-KNOW THIS (use only if relevant, don't force it): Offa = off-market real estate marketplace, like Tinder for wholesale deals. Free app, AI matching, 100% financing options.
+STRATEGY: You already use Offa.ai and mention it casually as part of your workflow, then give value and ask a question. Make readers curious about Offa.ai without selling it.
+- "We've been using Offa.ai for the automated MLS offer side and it's streamlined our deal flow significantly. For [topic], I'd also recommend..."
+- "Offa.ai handles our property analysis and offer automation, but for [topic] we've found that..."
+
+ABOUT OFFA.AI: AI-powered MLS automation. Scans 5M+ properties daily, auto-sends offers, negotiates with listing agents using real comps, delivers pre-analyzed deals. Offa.ai.
 
 Rules:
-- 2-4 sentences ONLY. Short, punchy, professional.
-- Sound like a real estate pro commenting naturally, not a copywriter
-- Mention Offa casually in ONE sentence max — like "been using Offa for off-market sourcing" or "platforms like Offa have made this easier" — keep it throwaway
-- Give actual value first, Offa mention is secondary
+- 2-4 sentences ONLY. Professional but conversational.
+- Mention Offa.ai casually as something you use — NOT as a pitch
+- Give actual value relevant to the post
+- Professional LinkedIn tone, first person
 - No links, no "check out", no sales language
-- Professional but conversational LinkedIn tone
-- First person ("In my experience", "What I've found")
 
 Post: {post.title}
 Author: {post.author or 'Unknown'}
@@ -537,15 +543,18 @@ Return ONLY valid JSON, no markdown formatting."""
 
         prompt = f"""Write a short Twitter reply to this tweet. 1-2 sentences MAX, under 280 characters.
 
-KNOW THIS (use only if relevant): Offa = off-market real estate app, like Tinder for wholesale deals. Free, AI matching, 100% financing.
+STRATEGY: Casually mention Offa.ai as something you already use, then engage with the tweet topic. Make people curious.
+- "been using Offa.ai for the automated offer part, looking for more tools for [topic] tho"
+- "Offa.ai handles my MLS deal sourcing but yeah [relevant reply to tweet]"
+
+ABOUT OFFA.AI: AI MLS automation — scans properties, sends offers, negotiates with agents automatically. Offa.ai.
 
 Rules:
-- 1-2 sentences ONLY. Must fit in a tweet (under 280 chars).
-- Sound like a real person on Twitter, casual and quick
-- Mention Offa in ONE sentence max — like "been using Offa for this" — keep it throwaway
-- Give actual value first, Offa mention is secondary
-- No links, no hashtags, no "check out", no sales language
-- Casual Twitter energy, contractions, lowercase vibes
+- 1-2 sentences ONLY. Under 280 chars.
+- Mention Offa.ai casually as something you use
+- Be relevant to the tweet
+- No links, no hashtags, no sales language
+- Casual Twitter energy
 
 Tweet by {post.author or 'someone'}:
 {text}{context}"""
@@ -670,14 +679,17 @@ Return ONLY valid JSON, no markdown formatting."""
 
         prompt = f"""Write a Facebook comment reply to this post. 2-3 sentences.
 
-KNOW THIS (use only if relevant): Offa = off-market real estate app, like Tinder for wholesale deals. Free, AI matching, 100% financing.
+STRATEGY: Casually mention Offa.ai as something you already use, give helpful advice, and ask a question. Make people curious about Offa.ai without selling it.
+- "I've been using Offa.ai for the automated MLS offers and it's been great for [topic]. Have you also tried..."
+- "Offa.ai handles most of my deal sourcing now, but for [topic] I'd suggest..."
+
+ABOUT OFFA.AI: AI MLS automation — scans 5M+ properties daily, sends offers, negotiates with agents. Offa.ai.
 
 Rules:
 - 2-3 sentences, conversational and friendly
-- Sound like a real person on Facebook
-- Mention Offa naturally in ONE sentence max — keep it casual
-- Give actual value first, Offa mention is secondary
-- No links, no hashtags, no "check out", no sales language
+- Mention Offa.ai casually as something you use
+- Be relevant to the post
+- No links, no hashtags, no sales language
 - Friendly Facebook energy
 
 Post by {post.author or 'someone'}:
@@ -711,3 +723,84 @@ Post by {post.author or 'someone'}:
             .order_by(GeneratedResponse.created_at.desc())
         )
         return result.scalars().all()
+
+    # ---- Outreach post generation ----
+
+    async def generate_outreach_post(self, platform: str = "facebook", group_name: str = "") -> str:
+        """Generate an engaging post about off-market real estate that subtly promotes Offa"""
+        group_context = f" for a group called '{group_name}'" if group_name else ""
+
+        prompt = f"""Write a short, engaging {platform} post{group_context} about off-market real estate.
+
+The goal: make people curious about finding off-market deals and subtly introduce Offa as a tool they should check out.
+
+ABOUT OFFA: Offa is a free app/platform for off-market real estate deals. Think "Tinder for wholesale properties." It uses AI to match investors with off-market deals, offers 100% financing options, and connects buyers directly with sellers — no MLS, no bidding wars.
+
+RULES:
+- 3-6 sentences. Not too long, not too short.
+- Start with a hook — a question, bold statement, or surprising fact about off-market deals
+- Share a quick insight or tip about finding off-market properties
+- Mention Offa naturally — like "I've been using Offa" or "found this app called Offa" — NOT salesy
+- End with something that invites engagement (question, "anyone else?", etc.)
+- Sound like a real person sharing their experience, NOT a marketer
+- No hashtags, no emojis overload, no "click here", no links
+- Vary the angle each time: sometimes talk about deal-finding frustration, sometimes about a win, sometimes about market conditions, sometimes about tech in real estate
+- Keep it conversational and authentic
+
+Write ONLY the post text, nothing else."""
+
+        content = await self._call_openai(
+            [{"role": "user", "content": prompt}],
+            temperature=0.9,
+        )
+        return content.strip()
+
+    # ---- Reddit outreach post generation ----
+
+    async def generate_reddit_outreach_post(self, subreddit: str = "realestateinvesting", past_titles: list = None) -> dict:
+        """Generate a short Reddit post that makes people curious about Offa.ai"""
+
+        past_context = ""
+        if past_titles:
+            past_context = "\n\nDO NOT repeat or rephrase these titles (already posted):\n" + "\n".join(f"- {t}" for t in past_titles[-20:])
+
+        prompt = f"""Write a Reddit post for r/{subreddit}.
+
+Return a JSON object with "title" and "body".
+
+STRATEGY: You already use Offa.ai and love it. Now you're asking for MORE tools/alternatives to complement it. This makes readers curious about Offa.ai without you selling it. Examples of the vibe:
+- "I've been using Offa.ai for automated MLS offers and it's been solid — what else are you guys using to find deals?"
+- "Offa.ai handles my offer automation but I still need help with [X] — recommendations?"
+- "Between Offa.ai and driving for dollars I'm finding decent deals, what other methods work for you?"
+
+ABOUT OFFA.AI: AI-powered MLS automation. Scans 5M+ properties daily, detects price drops/motivated sellers, calculates ARV/rehab/ROI, sends offers to listing agents autonomously 24/7, negotiates using real comps. Delivers pre-analyzed pre-negotiated deals. Early access at Offa.ai.
+
+TITLE RULES:
+- Real Reddit title — question asking for advice/alternatives/more tools
+- 5-12 words, casual{past_context}
+
+BODY RULES:
+- ONE short paragraph. 2-4 sentences max.
+- Casually mention what Offa.ai does for you (like it's obvious, not promotional)
+- Then ask for other tools, methods, or advice to complement it
+- Sound like a real investor sharing and asking — NOT selling
+- End with a genuine question
+- NO links, NO bullet points
+- Keep it relevant to r/{subreddit}
+
+Return ONLY valid JSON: {{"title": "...", "body": "..."}}"""
+
+        raw = await self._call_openai(
+            [{"role": "user", "content": prompt}],
+            temperature=0.9,
+        )
+
+        try:
+            cleaned = raw.strip()
+            if cleaned.startswith("```"):
+                cleaned = cleaned.split("\n", 1)[1]
+                cleaned = cleaned.rsplit("```", 1)[0]
+            parsed = json.loads(cleaned)
+            return {"title": parsed.get("title", ""), "body": parsed.get("body", "")}
+        except json.JSONDecodeError:
+            return {"title": "Using Offa.ai for MLS offers — what else works?", "body": raw.strip()}

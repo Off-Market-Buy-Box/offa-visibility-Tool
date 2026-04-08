@@ -126,6 +126,45 @@ class RedditPosterBrowser:
         )
         return result.get("batch_results", [])
 
+    async def create_post(self, subreddit: str, title: str, body: str) -> dict:
+        """Create a new text post in a subreddit"""
+        args_json = json.dumps({
+            "username": self.username,
+            "password": self.password,
+            "create_post": True,
+            "subreddit": subreddit,
+            "post_title": title,
+            "post_body": body,
+        })
+
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(
+            _executor,
+            _run_poster_subprocess_with_timeout,
+            sys.executable,
+            _SCRIPT_PATH,
+            args_json,
+            180,
+        )
+        return result
+
+    async def test_browser(self) -> dict:
+        """Test if Playwright/Chromium can launch — same subprocess as everything else"""
+        args_json = json.dumps({
+            "test_browser": True,
+        })
+
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(
+            _executor,
+            _run_poster_subprocess_with_timeout,
+            sys.executable,
+            _SCRIPT_PATH,
+            args_json,
+            30,
+        )
+        return result
+
     async def close(self):
         pass
 

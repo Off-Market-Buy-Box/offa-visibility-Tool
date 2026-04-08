@@ -17,6 +17,7 @@ from app.models.twitter_post import TwitterPost  # noqa
 from app.models.facebook_post import FacebookPost  # noqa
 from app.models.platform_credential import PlatformCredential  # noqa
 from app.models.automation_log import AutomationLog  # noqa
+from app.models.outreach_target import OutreachTarget, OutreachPost  # noqa
 
 app = FastAPI(
     title=settings.PROJECT_NAME,

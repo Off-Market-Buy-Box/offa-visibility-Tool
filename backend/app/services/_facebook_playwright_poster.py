@@ -302,6 +302,114 @@ def do_batch_post(pw, email, password, posts, delay_seconds=30):
         browser.close()
 
 
+def do_post_to_group(pw, email, password, group_url, text):
+    """Create a new post in a Facebook group."""
+    import time
+    print("STEP:launching_browser", flush=True)
+    browser = launch_browser(pw)
+    page = browser.new_page()
+    page.add_init_script(
+        "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });"
+    )
+
+    try:
+        page.goto("https://www.facebook.com/", wait_until="domcontentloaded")
+        page.wait_for_timeout(2000)
+
+        if not is_logged_in(page):
+            print("STEP:logging_in", flush=True)
+            page.goto("https://www.facebook.com/login/", wait_until="domcontentloaded")
+            page.wait_for_timeout(2000)
+            try:
+                page.locator('#email').first.fill(email)
+                page.locator('#pass').first.fill(password)
+                page.locator('button[name="login"]').first.click()
+                page.wait_for_timeout(3000)
+            except Exception:
+                pass
+            if not wait_for_login(page, timeout_seconds=60):
+                print(json.dumps({"posted": False, "error": "Login failed"}))
+                return
+
+        print("STEP:navigating_to_group", flush=True)
+        page.goto(group_url, wait_until="domcontentloaded")
+        page.wait_for_timeout(3000)
+
+        # Click the "Write something..." or "What's on your mind?" box
+        post_box = None
+        for sel in [
+            'div[role="button"]:has-text("Write something")',
+            'div[role="button"]:has-text("What\'s on your mind")',
+            'span:has-text("Write something")',
+            'span:has-text("What\'s on your mind")',
+        ]:
+            try:
+                el = page.locator(sel).first
+                if el.count() > 0 and el.is_visible():
+                    el.click()
+                    page.wait_for_timeout(2000)
+                    post_box = True
+                    break
+            except Exception:
+                continue
+
+        if not post_box:
+            print(json.dumps({"posted": False, "error": "Could not find post creation box in group"}))
+            return
+
+        # Find the text editor in the dialog
+        editor = None
+        for sel in [
+            'div[contenteditable="true"][role="textbox"]',
+            'div[contenteditable="true"][aria-label*="Write something"]',
+            'div[contenteditable="true"][aria-label*="Create a public post"]',
+            'div[contenteditable="true"]',
+        ]:
+            try:
+                el = page.locator(sel).first
+                if el.count() > 0 and el.is_visible():
+                    editor = el
+                    break
+            except Exception:
+                continue
+
+        if not editor:
+            print(json.dumps({"posted": False, "error": "Could not find text editor"}))
+            return
+
+        print("STEP:typing_post", flush=True)
+        editor.click()
+        page.wait_for_timeout(500)
+        editor.type(text, delay=25)
+        page.wait_for_timeout(1000)
+
+        # Click Post button
+        posted = False
+        for sel in [
+            'div[aria-label="Post"][role="button"]',
+            'span:has-text("Post")',
+            'button:has-text("Post")',
+        ]:
+            try:
+                btn = page.locator(sel).first
+                if btn.count() > 0 and btn.is_visible():
+                    btn.click()
+                    page.wait_for_timeout(5000)
+                    posted = True
+                    break
+            except Exception:
+                continue
+
+        if posted:
+            print(json.dumps({"posted": True, "url": page.url}))
+        else:
+            print(json.dumps({"posted": False, "error": "Could not find Post button"}))
+
+    finally:
+        page.close()
+        browser.close()
+
+
 def main():
     if len(sys.argv) < 2:
         print(json.dumps({"error": "No arguments provided"}))
@@ -320,12 +428,16 @@ def main():
     login_only = args.get("login_only", False)
     batch_posts = args.get("batch_posts", None)
     delay_seconds = args.get("delay_seconds", 30)
+    group_url = args.get("group_url", "")
+    group_text = args.get("group_text", "")
 
     from playwright.sync_api import sync_playwright
     try:
         with sync_playwright() as pw:
             if login_only:
                 do_login_only(pw, email, password)
+            elif group_url and group_text:
+                do_post_to_group(pw, email, password, group_url, group_text)
             elif batch_posts:
                 do_batch_post(pw, email, password, batch_posts, delay_seconds)
             elif post_url and text:

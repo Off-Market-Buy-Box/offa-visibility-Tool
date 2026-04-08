@@ -35,6 +35,17 @@ class RedditPoster:
             "posted": True,
         }
 
+    def _create_post_sync(self, subreddit_name: str, title: str, body: str) -> dict:
+        """Synchronous method to create a new text post in a subreddit"""
+        reddit = self._get_reddit()
+        subreddit = reddit.subreddit(subreddit_name)
+        submission = subreddit.submit(title=title, selftext=body)
+        return {
+            "post_id": submission.id,
+            "post_url": f"https://www.reddit.com{submission.permalink}",
+            "posted": True,
+        }
+
     async def post_comment(self, post_id: str, text: str) -> dict:
         """Post a comment to a Reddit thread (async wrapper)"""
         if not all([self.client_id, self.client_secret, self.username, self.password]):
@@ -45,6 +56,19 @@ class RedditPoster:
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
             None, partial(self._post_comment_sync, post_id, text)
+        )
+        return result
+
+    async def create_post(self, subreddit: str, title: str, body: str) -> dict:
+        """Create a new text post in a subreddit (async wrapper)"""
+        if not all([self.client_id, self.client_secret, self.username, self.password]):
+            raise ValueError(
+                "Reddit API credentials not configured. Set REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET, REDDIT_USERNAME, REDDIT_PASSWORD in .env"
+            )
+
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None, partial(self._create_post_sync, subreddit, title, body)
         )
         return result
 

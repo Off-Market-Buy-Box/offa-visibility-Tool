@@ -1,4 +1,4 @@
-import { Search, KeyRound, Bot } from "lucide-react";
+import { Search, KeyRound, Bot, Megaphone } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import RedditIcon from "@/components/icons/RedditIcon";
 import LinkedInIcon from "@/components/icons/LinkedInIcon";
@@ -25,6 +25,7 @@ const navSections = [
     label: "AUTOMATION",
     items: [
       { title: "Automation", icon: Bot, url: "/automation", color: "" },
+      { title: "Outreach", icon: Megaphone, url: "/outreach", color: "text-orange-500" },
     ],
   },
   {

@@ -781,6 +781,358 @@ def do_batch_post(pw, username, password, posts, delay_seconds=30):
     print(json.dumps({"batch_results": results}))
 
 
+def do_create_post(pw, username, password, subreddit, title, body):
+    """Create a new text post in a subreddit — mirrors do_post_comment exactly."""
+    print("STEP:launching_browser", flush=True)
+    browser = launch_browser(pw)
+    page = browser.new_page()
+    page.add_init_script(
+        "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });"
+    )
+
+    try:
+        # === CHECK LOGIN === (copied from do_post_comment)
+        print("STEP:checking_session", flush=True)
+        page.goto("https://www.reddit.com/", wait_until="domcontentloaded")
+        page.wait_for_timeout(3000)
+
+        if not is_logged_in(page):
+            print("STEP:not_logged_in_attempting_login", flush=True)
+            page.goto("https://www.reddit.com/login/", wait_until="domcontentloaded")
+            page.wait_for_timeout(2000)
+
+            body_text = page.inner_text("body")
+            has_captcha = (
+                "Prove your humanity" in body_text
+                or "not a robot" in body_text.lower()
+            )
+
+            if has_captcha:
+                print("STEP:captcha_detected_waiting", flush=True)
+                success = wait_for_login(page, timeout_seconds=120)
+                if not success:
+                    print(json.dumps({
+                        "error": "Not logged in and CAPTCHA detected. "
+                                 "Use 'Login to Reddit' button first."
+                    }))
+                    sys.exit(1)
+            else:
+                try:
+                    for sel in ['#login-username', 'input[name="username"]']:
+                        el = page.locator(sel).first
+                        if el.count() > 0 and el.is_visible():
+                            el.fill(username)
+                            break
+                    for sel in ['#login-password', 'input[name="password"]']:
+                        el = page.locator(sel).first
+                        if el.count() > 0 and el.is_visible():
+                            el.fill(password)
+                            break
+                    for sel in ['button[type="submit"]', 'button:has-text("Log In")']:
+                        el = page.locator(sel).first
+                        if el.count() > 0 and el.is_visible():
+                            el.click()
+                            break
+                    page.wait_for_timeout(6000)
+                except Exception as e:
+                    print(json.dumps({
+                        "error": f"Auto-login failed: {e}. "
+                                 "Use 'Login to Reddit' button first."
+                    }))
+                    sys.exit(1)
+
+                if "/login" in page.url:
+                    print(json.dumps({
+                        "error": "Login failed. Use 'Login to Reddit' button first."
+                    }))
+                    sys.exit(1)
+
+            print("STEP:logged_in", flush=True)
+        else:
+            print("STEP:already_logged_in", flush=True)
+
+        # === NAVIGATE TO SUBMIT PAGE ===
+        submit_url = f"https://www.reddit.com/r/{subreddit}/submit"
+        print(f"STEP:navigating_to_submit_page", flush=True)
+        page.goto(submit_url, wait_until="domcontentloaded")
+        page.wait_for_timeout(5000)
+
+        if "/login" in page.url:
+            print(json.dumps({
+                "error": "Redirected to login — session expired. "
+                         "Use 'Login to Reddit' button."
+            }))
+            sys.exit(1)
+
+        print("STEP:on_submit_page", flush=True)
+
+        # === CLICK TEXT TAB ===
+        print("STEP:selecting_text_tab", flush=True)
+        page.evaluate("""
+            () => {
+                // Click the "Text" tab link if present
+                const links = document.querySelectorAll('a, button, [role="tab"]');
+                for (const el of links) {
+                    if (el.textContent.trim() === 'Text') {
+                        el.click();
+                        return 'clicked_text_tab';
+                    }
+                }
+                return null;
+            }
+        """)
+        page.wait_for_timeout(2000)
+
+        # === FILL TITLE ===
+        # Reddit submit page has a title textarea/input — find it and type
+        print("STEP:filling_title", flush=True)
+
+        # Strategy 1: find textarea with "Title" placeholder via JS (handles shadow DOM)
+        title_box = page.evaluate("""
+            () => {
+                // Check regular DOM first
+                const textareas = document.querySelectorAll('textarea, input[type="text"]');
+                for (const el of textareas) {
+                    const ph = el.placeholder || el.getAttribute('aria-label') || '';
+                    if (ph.toLowerCase().includes('title')) {
+                        const rect = el.getBoundingClientRect();
+                        if (rect.width > 50 && rect.height > 10) {
+                            el.focus();
+                            el.click();
+                            return {x: rect.x + rect.width/2, y: rect.y + rect.height/2,
+                                    tag: el.tagName, type: 'regular'};
+                        }
+                    }
+                }
+                // Check inside shadow roots (faceplate-textarea-input etc.)
+                const customs = document.querySelectorAll('*');
+                for (const el of customs) {
+                    if (el.shadowRoot) {
+                        const inner = el.shadowRoot.querySelectorAll('textarea, input[type="text"]');
+                        for (const inp of inner) {
+                            const rect = inp.getBoundingClientRect();
+                            if (rect.width > 100 && rect.height > 10) {
+                                inp.focus();
+                                inp.click();
+                                return {x: rect.x + rect.width/2, y: rect.y + rect.height/2,
+                                        tag: inp.tagName, type: 'shadow'};
+                            }
+                        }
+                    }
+                }
+                // Fallback: first textarea on the page
+                if (textareas.length > 0) {
+                    const el = textareas[0];
+                    const rect = el.getBoundingClientRect();
+                    el.focus();
+                    el.click();
+                    return {x: rect.x + rect.width/2, y: rect.y + rect.height/2,
+                            tag: el.tagName, type: 'fallback'};
+                }
+                return null;
+            }
+        """)
+
+        if not title_box:
+            print(json.dumps({
+                "error": f"Cannot find title field on submit page. URL: {page.url}"
+            }))
+            sys.exit(1)
+
+        print(f"STEP:title_field_found:{title_box.get('type')}", flush=True)
+
+        # Click and type title (same keyboard approach as comment typing)
+        page.mouse.click(title_box["x"], title_box["y"])
+        page.wait_for_timeout(500)
+        page.keyboard.press("Control+a")
+        page.keyboard.press("Backspace")
+        page.wait_for_timeout(200)
+        page.keyboard.type(title, delay=10)
+        page.wait_for_timeout(1000)
+        print("STEP:title_typed", flush=True)
+
+        # === FILL BODY ===
+        # The body editor is a Lexical rich-text editor — same as comment box
+        print("STEP:filling_body", flush=True)
+
+        # First try: use _find_and_activate_comment_box (reuse existing helper)
+        # Scroll down a bit to make body visible
+        page.evaluate("window.scrollTo(0, 300)")
+        page.wait_for_timeout(1000)
+
+        # Try activating the composer/editor area
+        page.evaluate("""
+            () => {
+                const composer = document.querySelector('shreddit-composer');
+                if (composer) {
+                    composer.click();
+                    if (composer.shadowRoot) {
+                        const placeholder = composer.shadowRoot.querySelector(
+                            '[placeholder], [data-placeholder], .placeholder, p'
+                        );
+                        if (placeholder) placeholder.click();
+                        const editorArea = composer.shadowRoot.querySelector(
+                            '[contenteditable], [role="textbox"], .notranslate, .ql-editor'
+                        );
+                        if (editorArea) editorArea.click();
+                    }
+                }
+                // Also try clicking any contenteditable that looks like the body
+                const editables = document.querySelectorAll(
+                    'div[contenteditable="true"][role="textbox"], '
+                    + 'div.notranslate[contenteditable="true"]'
+                );
+                for (const el of editables) {
+                    const rect = el.getBoundingClientRect();
+                    if (rect.width > 200 && rect.height > 30) {
+                        el.click();
+                        return;
+                    }
+                }
+            }
+        """)
+        page.wait_for_timeout(1000)
+
+        # Use the same _find_and_activate_comment_box helper
+        box = _find_and_activate_comment_box(page)
+
+        if not box:
+            # Retry after extra wait
+            print("STEP:retrying_body_field", flush=True)
+            page.wait_for_timeout(3000)
+            page.evaluate("""
+                () => {
+                    const composer = document.querySelector('shreddit-composer');
+                    if (composer) {
+                        composer.click();
+                        if (composer.shadowRoot) {
+                            const divs = composer.shadowRoot.querySelectorAll('div');
+                            for (const d of divs) {
+                                const rect = d.getBoundingClientRect();
+                                if (rect.height > 30 && rect.width > 200) {
+                                    d.click();
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            """)
+            page.wait_for_timeout(2000)
+            box = _find_and_activate_comment_box(page)
+
+        if box:
+            print(f"STEP:body_box_found:tag={box.get('tag')},w={box.get('width')},h={box.get('height')}", flush=True)
+            page.mouse.click(box["x"], box["y"])
+            page.wait_for_timeout(500)
+            typed = _type_into_comment_box(page, body)
+            if not typed:
+                print("STEP:body_typing_failed_retrying", flush=True)
+                page.mouse.click(box["x"] + 5, box["y"] + 5)
+                page.wait_for_timeout(500)
+                typed = _type_into_comment_box(page, body)
+            if typed:
+                print("STEP:body_typed", flush=True)
+            else:
+                print("STEP:body_type_verification_failed_continuing", flush=True)
+        else:
+            # Body is optional — continue without it
+            print("STEP:body_field_not_found_continuing", flush=True)
+
+        page.wait_for_timeout(1500)
+
+        # === CLICK POST/SUBMIT BUTTON ===
+        print("STEP:finding_post_button", flush=True)
+        page.wait_for_timeout(500)
+
+        # Use JS to find the Post button (handles shadow DOM)
+        clicked = page.evaluate("""
+            () => {
+                function findPostBtn(root) {
+                    const buttons = root.querySelectorAll('button');
+                    for (const btn of buttons) {
+                        const text = (btn.textContent || '').trim();
+                        if (text === 'Post' || text === 'Submit') {
+                            const rect = btn.getBoundingClientRect();
+                            if (rect.width > 0 && rect.height > 0 && !btn.disabled) {
+                                btn.click();
+                                return true;
+                            }
+                        }
+                    }
+                    const allEls = root.querySelectorAll('*');
+                    for (const el of allEls) {
+                        if (el.shadowRoot) {
+                            const result = findPostBtn(el.shadowRoot);
+                            if (result) return true;
+                        }
+                    }
+                    return false;
+                }
+                return findPostBtn(document);
+            }
+        """)
+
+        if not clicked:
+            # Fallback: try Playwright selectors
+            for sel in [
+                'button:has-text("Post")',
+                'button:has-text("Submit")',
+                'button[type="submit"]',
+            ]:
+                try:
+                    el = page.locator(sel).first
+                    if el.count() > 0 and el.is_visible():
+                        el.click()
+                        clicked = True
+                        break
+                except Exception:
+                    continue
+
+        if not clicked:
+            print(json.dumps({
+                "error": f"Cannot find Post/Submit button. URL: {page.url}"
+            }))
+            sys.exit(1)
+
+        print("STEP:clicking_post", flush=True)
+        page.wait_for_timeout(6000)
+
+        print("STEP:done", flush=True)
+        print(json.dumps({
+            "posted": True, "method": "browser",
+            "post_url": page.url,
+        }))
+
+    finally:
+        page.close()
+        browser.close()
+
+
+def do_test_browser(pw):
+    """Just launch browser, go to reddit.com, check login, close. For testing."""
+    print("STEP:launching_browser", flush=True)
+    browser = launch_browser(pw)
+    page = browser.new_page()
+    page.add_init_script(
+        "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });"
+    )
+    try:
+        print("STEP:navigating_to_reddit", flush=True)
+        page.goto("https://www.reddit.com/", wait_until="domcontentloaded")
+        page.wait_for_timeout(3000)
+        logged_in = is_logged_in(page)
+        print("STEP:done", flush=True)
+        print(json.dumps({
+            "ok": True,
+            "logged_in": logged_in,
+            "message": f"Browser launched OK. Logged in: {logged_in}",
+        }))
+    finally:
+        page.close()
+        browser.close()
+
+
 def main():
     if len(sys.argv) < 2:
         print(json.dumps({"error": "No arguments provided"}))
@@ -798,6 +1150,11 @@ def main():
     text = args.get("text", "")
     login_only = args.get("login_only", False)
     batch_posts = args.get("batch_posts", None)
+    create_post = args.get("create_post", False)
+    subreddit = args.get("subreddit", "")
+    post_title = args.get("post_title", "")
+    post_body = args.get("post_body", "")
+    test_browser = args.get("test_browser", False)
 
     try:
         from playwright.sync_api import sync_playwright
@@ -810,8 +1167,12 @@ def main():
         print("STEP:starting_playwright", flush=True)
         pw = sync_playwright().start()
 
-        if login_only:
+        if test_browser:
+            do_test_browser(pw)
+        elif login_only:
             do_login_only(pw, username, password)
+        elif create_post and subreddit and post_title:
+            do_create_post(pw, username, password, subreddit, post_title, post_body)
         elif batch_posts:
             delay = args.get("delay_seconds", 30)
             do_batch_post(pw, username, password, batch_posts, delay)
