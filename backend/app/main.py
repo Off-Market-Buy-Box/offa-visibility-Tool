@@ -48,7 +48,7 @@ async def cleanup_old_posts():
     """Remove old uncommented posts (>30 days) on every server start"""
     try:
         from datetime import datetime, timedelta
-        from sqlalchemy import delete, and_
+        from sqlalchemy import delete, and_, or_
         from app.core.database import AsyncSessionLocal
         from app.models.reddit_mention import RedditMention
 
@@ -58,7 +58,10 @@ async def cleanup_old_posts():
                 delete(RedditMention).where(
                     and_(
                         RedditMention.agent_posted == False,
-                        RedditMention.posted_at < cutoff,
+                        or_(
+                            RedditMention.posted_at < cutoff,
+                            RedditMention.created_at < cutoff,
+                        )
                     )
                 )
             )
