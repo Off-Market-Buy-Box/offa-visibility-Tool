@@ -133,13 +133,28 @@ Return ONLY valid JSON, no markdown formatting."""
         if metadata:
             context = f"\nAI Analysis - Intent: {metadata.intent}, Topic: {metadata.main_topic}, Sentiment: {metadata.sentiment}"
 
-        prompt = f"""Write a short Reddit comment replying to this post. 2-3 sentences MAX.
+        # Alternate link between offa.com and offa.ai based on mention id
+        if mention_id % 2 == 0:
+            offa_link = "[Offa](https://offa.com)"
+            offa_plain = "Offa"
+        else:
+            offa_link = "[Offa.ai](https://offa.ai)"
+            offa_plain = "Offa.ai"
+
+        prompt = f"""Write a short Reddit comment replying to this post. 2-3 sentences MAX, like a real person typing fast.
+
+STRATEGY: You're a real estate investor who uses {offa_plain} to find off-market deals. Mention it casually as part of your workflow, give helpful advice, and ask a follow-up question.
+
+ABOUT OFFA: {offa_plain} is a free off-market real estate marketplace — like Tinder for wholesale properties. Investors swipe through exclusive off-market deals, connect directly with sellers, chat in real time, and can get up to 100% financing. No MLS, no bidding wars. Thousands of new off-market deals posted weekly.
 
 Rules:
-- Lead with helpful advice first, then casually mention you use Offa for MLS automation
-- Just say "Offa" — no URLs, no links, no offa.ai, no offa.com
-- Keep it brief — don't describe Offa in detail, just mention it naturally
-- Sound like a real person on Reddit, not a marketer
+- 2-3 sentences ONLY. Short and punchy like real Reddit comments.
+- Include EXACTLY ONE markdown link using this exact format: {offa_link} — weave it naturally into the sentence
+- Do NOT include both offa.com and offa.ai — only use {offa_link}
+- Mention it casually as something you already use for finding off-market deals — NOT as a recommendation
+- Give actual helpful advice relevant to the post
+- Sound like a normal person on Reddit, not a marketer
+- No "check out", no sales language
 
 Post: {mention.title}
 r/{mention.subreddit}
@@ -394,13 +409,28 @@ Return ONLY valid JSON, no markdown formatting."""
         if len(text) > 6000:
             text = text[:6000] + "..."
 
+        # Alternate link between offa.com and offa.ai based on post id
+        if post_id % 2 == 0:
+            offa_link = "[Offa](https://offa.com)"
+            offa_plain = "Offa"
+        else:
+            offa_link = "[Offa.ai](https://offa.ai)"
+            offa_plain = "Offa.ai"
+
         prompt = f"""Write a short LinkedIn comment replying to this post. 2-4 sentences MAX.
 
+STRATEGY: You're a real estate investor who uses {offa_plain} to source off-market deals. Mention it casually as part of your workflow, give value, and ask a question.
+
+ABOUT OFFA: {offa_plain} is a free off-market real estate marketplace — connects investors directly with sellers on exclusive off-market properties. Swipe through deals, chat with sellers in real time, get up to 100% financing. No MLS, no bidding wars.
+
 Rules:
-- Lead with value relevant to the post, then mention you use Offa for deal automation
-- Just say "Offa" — no URLs, no links, no offa.ai, no offa.com
-- Professional but conversational LinkedIn tone
-- Don't describe Offa in detail — just mention it briefly as part of your workflow
+- 2-4 sentences ONLY. Professional but conversational.
+- Include EXACTLY ONE markdown link using this exact format: {offa_link} — weave it naturally into the sentence
+- Do NOT include both offa.com and offa.ai — only use {offa_link}
+- Mention it casually as something you use — NOT as a pitch
+- Give actual value relevant to the post
+- Professional LinkedIn tone, first person
+- No "check out", no sales language
 
 Post: {post.title}
 Author: {post.author or 'Unknown'}
@@ -526,12 +556,28 @@ Return ONLY valid JSON, no markdown formatting."""
 
         text = post.content or post.snippet or ""
 
+        # Alternate link based on post id
+        if post_id % 2 == 0:
+            offa_url = "offa.com"
+            offa_plain = "Offa"
+        else:
+            offa_url = "offa.ai"
+            offa_plain = "Offa.ai"
+
         prompt = f"""Write a short Twitter reply to this tweet. 1-2 sentences MAX, under 280 characters.
 
+STRATEGY: You're an investor who uses {offa_plain} to find off-market deals. Mention it casually, engage with the tweet.
+
+ABOUT OFFA: {offa_plain} is a free off-market real estate marketplace — swipe through exclusive off-market deals, connect with sellers, no MLS.
+
 Rules:
-- Engage with the tweet topic, casually mention you use Offa
-- Just say "Offa" — no URLs, no links, no domains
-- Casual Twitter energy, keep it short
+- 1-2 sentences ONLY. Under 280 chars.
+- Include the plain URL {offa_url} once (Twitter auto-links URLs, no markdown needed)
+- Do NOT include both offa.com and offa.ai — only use {offa_url}
+- Mention it casually as something you use for off-market deals
+- Be relevant to the tweet
+- No hashtags, no sales language
+- Casual Twitter energy
 
 Tweet by {post.author or 'someone'}:
 {text}{context}"""
@@ -654,13 +700,28 @@ Return ONLY valid JSON, no markdown formatting."""
 
         text = post.content or post.snippet or ""
 
+        # Alternate link based on post id
+        if post_id % 2 == 0:
+            offa_link = "offa.com"
+            offa_plain = "Offa"
+        else:
+            offa_link = "offa.ai"
+            offa_plain = "Offa.ai"
+
         prompt = f"""Write a Facebook comment reply to this post. 2-3 sentences.
 
+STRATEGY: You're an investor who uses {offa_plain} to find off-market deals. Mention it casually, give helpful advice, ask a question.
+
+ABOUT OFFA: {offa_plain} is a free off-market real estate marketplace — swipe through exclusive off-market deals, connect directly with sellers, get up to 100% financing. No MLS, no bidding wars.
+
 Rules:
-- Give helpful advice, casually mention you use Offa for deal sourcing/automation
-- Just say "Offa" — no URLs, no links, no domains
-- Friendly conversational tone
-- Don't describe Offa in detail — just mention it briefly
+- 2-3 sentences, conversational and friendly
+- Include the plain URL {offa_link} once in the text (Facebook auto-links URLs)
+- Do NOT include both offa.com and offa.ai — only use {offa_link}
+- Mention it casually as something you use for off-market deals
+- Be relevant to the post
+- No hashtags, no sales language
+- Friendly Facebook energy
 
 Post by {post.author or 'someone'}:
 {text}{context}"""
@@ -713,7 +774,7 @@ Post by {post.author or 'someone'}:
 
 The goal: make people curious about finding off-market deals and subtly introduce {offa_plain} as a tool they should check out.
 
-ABOUT OFFA: Offa is a free app/platform for off-market real estate deals. Think "Tinder for wholesale properties." It uses AI to match investors with off-market deals, offers 100% financing options, and connects buyers directly with sellers — no MLS, no bidding wars.
+ABOUT OFFA: {offa_plain} is a free off-market real estate marketplace. Think "Tinder for wholesale properties." Investors swipe through exclusive off-market deals, connect directly with sellers, chat in real time, and can get up to 100% financing. No MLS, no bidding wars. Thousands of new off-market deals posted weekly nationwide.
 
 RULES:
 - 3-6 sentences. Not too long, not too short.
@@ -725,7 +786,7 @@ RULES:
 - End with something that invites engagement (question, "anyone else?", etc.)
 - Sound like a real person sharing their experience, NOT a marketer
 - No hashtags, no emojis overload, no "click here"
-- Vary the angle each time: sometimes talk about deal-finding frustration, sometimes about a win, sometimes about market conditions, sometimes about tech in real estate
+- Vary the angle each time: sometimes talk about deal-finding frustration, sometimes about a win, sometimes about market conditions, sometimes about off-market vs MLS
 - Keep it conversational and authentic
 
 Write ONLY the post text, nothing else."""
@@ -749,16 +810,18 @@ Write ONLY the post text, nothing else."""
 
 Return a JSON object with "title" and "body".
 
-You are a real estate investor sharing a real experience or asking a genuine question. Make up a specific, believable mini-story or situation. Vary the format — sometimes it's a question, sometimes sharing a lesson learned, sometimes asking for advice on a specific deal.
+You are a real estate investor sharing a real experience or asking a genuine question about off-market deals. Make up a specific, believable mini-story or situation. Vary the format — sometimes it's a question, sometimes sharing a lesson learned, sometimes asking for advice on a specific deal.
 
-TITLE: At least 60 characters. A specific, interesting question or story hook relevant to r/{subreddit}. Do NOT mention Offa in the title.{past_context}
+ABOUT OFFA: {offa_plain} is a free off-market real estate marketplace — like Tinder for wholesale properties. Investors swipe through exclusive off-market deals, connect directly with sellers, chat in real time, and can get up to 100% financing. No MLS, no bidding wars. Thousands of new off-market deals posted weekly.
 
-BODY: One short paragraph, 2-4 sentences. Tell a quick story or describe a specific situation. If it fits naturally, mention Offa as something you use — but only if it makes sense in context. Sometimes don't mention it at all. No URLs, no links. Sound like a real person, not a template.
+TITLE: At least 60 characters. A specific, interesting question or story hook relevant to r/{subreddit} and off-market real estate. Do NOT mention Offa in the title.{past_context}
+
+BODY: One short paragraph, 2-4 sentences. Tell a quick story or describe a specific situation about off-market deals. If it fits naturally, mention {offa_plain} as an off-market marketplace you use — but only if it makes sense in context. Sometimes don't mention it at all. Include {offa_link} as a markdown link if you mention it. No other URLs. Sound like a real person, not a template.
 
 Examples of good variety:
-- "Just lost a deal because the seller got a higher offer 2 hours before closing. I had the numbers right but moved too slow on the initial offer. For those of you doing volume, how do you speed up your offer process without cutting corners on due diligence?"
-- "Closed my first wholesale deal last month after 6 months of grinding. Used Offa to find the lead through MLS automation and ended up assigning it for 12k. Small win but it proved the model works. Anyone else remember their first deal?"
-- "My agent keeps sending me MLS listings that are already under contract by the time I see them. Thinking about switching to a more automated approach. What tools or systems are you using to get notified faster?"
+- "Been wholesaling for about 8 months now and the hardest part is still finding consistent deal flow. I started using {offa_link} recently for off-market leads and it's been decent — got a few properties under contract that I never would have found on MLS. Anyone else finding off-market marketplaces better than driving for dollars?"
+- "Just closed on a duplex I found off-market for 40k under what comparable MLS listings were going for. The seller wanted a quick close and didn't want to deal with showings. For those of you doing off-market, where are you finding your best deals?"
+- "I keep hearing people say off-market is the way to go but every wholesaler I've talked to wants 10-15k assignment fees. Is it still worth it at that point or am I better off just being patient on MLS?"
 
 Return ONLY valid JSON: {{"title": "...", "body": "..."}}"""
 
@@ -775,4 +838,4 @@ Return ONLY valid JSON: {{"title": "...", "body": "..."}}"""
             parsed = json.loads(cleaned)
             return {"title": parsed.get("title", ""), "body": parsed.get("body", "")}
         except json.JSONDecodeError:
-            return {"title": "Using Offa.ai for MLS offers — what else works?", "body": raw.strip()}
+            return {"title": "Finding off-market deals without MLS — what's working for you?", "body": raw.strip()}

@@ -23,8 +23,8 @@ class AutomationService:
                 "twitter": {"enabled": True, "last_scan": None, "last_comment": None, "total_commented": 0, "total_scanned": 0, "errors": 0},
                 "facebook": {"enabled": True, "last_scan": None, "last_comment": None, "total_commented": 0, "total_scanned": 0, "errors": 0},
             },
-            "delay_between_cycles": 10,
-            "max_posts_per_run": 10,
+            "delay_between_cycles": 600,
+            "max_posts_per_run": 1,
         }
 
     def get_status(self) -> Dict:

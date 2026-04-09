@@ -12,30 +12,8 @@ router = APIRouter()
 
 # Only PUBLIC subreddits where anyone can post (no private/restricted)
 DEFAULT_SUBREDDITS = [
-    # --- Real Estate Investing (open, large) ---
-    {"name": "r/realestateinvesting", "url": "https://www.reddit.com/r/realestateinvesting/"},
-    {"name": "r/RealEstate", "url": "https://www.reddit.com/r/RealEstate/"},
-    {"name": "r/CommercialRealEstate", "url": "https://www.reddit.com/r/CommercialRealEstate/"},
-    {"name": "r/rentalproperty", "url": "https://www.reddit.com/r/rentalproperty/"},
-    {"name": "r/landlord", "url": "https://www.reddit.com/r/landlord/"},
-    # --- Wholesaling (open) ---
     {"name": "r/WholesaleRealestate", "url": "https://www.reddit.com/r/WholesaleRealestate/"},
-    {"name": "r/wholesaling", "url": "https://www.reddit.com/r/wholesaling/"},
-    # --- Flipping (open) ---
-    {"name": "r/Flipping", "url": "https://www.reddit.com/r/Flipping/"},
-    {"name": "r/fixandflip", "url": "https://www.reddit.com/r/fixandflip/"},
-    # --- Buyers & Market (open) ---
-    {"name": "r/FirstTimeHomeBuyer", "url": "https://www.reddit.com/r/FirstTimeHomeBuyer/"},
-    {"name": "r/homeowners", "url": "https://www.reddit.com/r/homeowners/"},
-    {"name": "r/REBubble", "url": "https://www.reddit.com/r/REBubble/"},
-    # --- Entrepreneurship (open, large) ---
-    {"name": "r/Entrepreneur", "url": "https://www.reddit.com/r/Entrepreneur/"},
-    {"name": "r/smallbusiness", "url": "https://www.reddit.com/r/smallbusiness/"},
-    {"name": "r/passive_income", "url": "https://www.reddit.com/r/passive_income/"},
-    # --- Financial Independence ---
-    {"name": "r/financialindependence", "url": "https://www.reddit.com/r/financialindependence/"},
-    {"name": "r/Fire", "url": "https://www.reddit.com/r/Fire/"},
-    {"name": "r/personalfinance", "url": "https://www.reddit.com/r/personalfinance/"},
+    {"name": "r/RealEstateAdvice", "url": "https://www.reddit.com/r/RealEstateAdvice/"},
 ]
 
 

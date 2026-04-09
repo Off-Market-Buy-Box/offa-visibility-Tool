@@ -20,43 +20,23 @@ class RedditService:
         }
         
         self.real_estate_subreddits = [
-            # Core real estate investing
             "realestateinvesting",
             "RealEstate",
             "realestate",
             "CommercialRealEstate",
             "WholesaleRealestate",
-            "wholesaling",
             "Flipping",
-            "fixandflip",
-            # Buyers & homeowners
             "FirstTimeHomeBuyer",
-            "homeowners",
-            "homebuying",
-            "REBubble",
-            # Landlords & property management
+            "RealEstateAdvice",
             "Landlord",
             "PropertyManagement",
+            "REBubble",
+            "homeowners",
+            "wholesaling",
+            "fixandflip",
             "rentalproperty",
             "rentalincome",
-            # Advice & niche
-            "RealEstateAdvice",
-            "RealEstateTechnology",
-            "realestateinvestingclub",
-            "RealEstateCanada",
-            "Mortgages",
-            # Finance & entrepreneurship
-            "personalfinance",
-            "financialindependence",
-            "fatFIRE",
-            "leanfire",
-            "investing",
-            "passiveincome",
-            "Entrepreneur",
-            "smallbusiness",
-            "passive_income",
-            "Fire",
-            "HomeImprovement",
+            "homebuying",
         ]
 
         # Rotation index — tracks which batch of subreddits to scan next
@@ -123,7 +103,7 @@ class RedditService:
         subreddit: str = None,
         sort: str = "relevance",
         limit: int = 100,
-        time_filter: str = "month",
+        time_filter: str = "year",
     ) -> List[Dict]:
         """Search Reddit using the search API with retry on 429 rate limits"""
         results = []
@@ -349,7 +329,7 @@ class RedditService:
                 try:
                     results = await self.search_reddit(
                         query, subreddit=subreddit, sort="new",
-                        limit=limit_per_subreddit, time_filter="week",
+                        limit=limit_per_subreddit, time_filter="year",
                     )
                 except Exception as e:
                     print(f"  ❌ Error for '{query}': {e}")
@@ -372,26 +352,15 @@ class RedditService:
                 seen.add(m["post_id"])
                 unique_mentions.append(m)
 
-        # Step 1: Quick keyword filter (remove obviously irrelevant)
-        keyword_filtered = [m for m in unique_mentions if m.get("is_relevant", True)]
-        print(f"📋 After keyword filter: {len(keyword_filtered)}/{len(unique_mentions)} posts")
+        # Mark all as relevant — no AI filtering
+        for m in unique_mentions:
+            m["is_relevant"] = True
 
-        # Step 2: AI relevance scoring on the remaining posts (batches of 20)
-        from app.services.ai_service import AIService
-        ai = AIService()
-        ai_scored = []
-        for i in range(0, len(keyword_filtered), 20):
-            batch = keyword_filtered[i:i+20]
-            scored = await ai.score_relevance_batch(batch)
-            ai_scored.extend(scored)
+        stats["total_mentions_found"] = len(unique_mentions)
+        print(f"📋 {len(unique_mentions)} unique posts found")
 
-        relevant = [m for m in ai_scored if m.get("is_relevant", False)]
-        stats["ai_filtered_out"] = len(ai_scored) - len(relevant)
-        stats["total_mentions_found"] = len(relevant)
-        print(f"🤖 After AI filter: {len(relevant)}/{len(ai_scored)} posts relevant")
-
-        # Save only relevant posts
-        stats["new_mentions_saved"] = await self.save_mentions(db, relevant)
+        # Save all posts
+        stats["new_mentions_saved"] = await self.save_mentions(db, unique_mentions)
         
         return stats
     
